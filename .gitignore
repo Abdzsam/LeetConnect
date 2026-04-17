@@ -1,0 +1,18 @@
+node_modules
+dist
+.turbo
+.env
+.env.local
+*.local
+.DS_Store
+*.log
+
+# Extension build output
+apps/extension/dist
+apps/extension/.crx
+
+# Server build
+apps/server/dist
+
+# pnpm
+.pnpm-store
