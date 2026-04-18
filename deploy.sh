@@ -13,34 +13,29 @@ EXT_DIR="$ROOT/apps/extension"
 echo "▶ Deploying server to Railway..."
 cd "$SERVER_DIR"
 
-# Initialize project if not already linked
+# Link project if not already linked
 if ! railway status &>/dev/null; then
   railway init --name leetconnect-server
 fi
 
-# Push all env vars from .env to Railway
+# Push all env vars from .env to Railway (skip deploys, we'll deploy once at the end)
 echo "  Setting environment variables..."
 while IFS='=' read -r key value; do
   [[ -z "$key" || "$key" == \#* ]] && continue
-  railway variables set "$key=$value" --silent 2>/dev/null || true
+  railway variable --service server set "$key=$value" --skip-deploys 2>/dev/null || true
 done < .env
+railway variable --service server set NODE_ENV=production --skip-deploys
 
-# Override NODE_ENV for production
-railway variables set NODE_ENV=production --silent
+# Deploy (--service server creates the service if it doesn't exist yet)
+railway up --detach --service server
+echo "  Waiting for deployment to start..."
+sleep 15
 
-# Deploy
-railway up --detach
-echo "  Waiting for deployment..."
-sleep 10
-
-# Get the deployed URL
-SERVER_URL=$(railway domain 2>/dev/null | grep -Eo 'https://[^ ]+' | head -1 || echo "")
-if [[ -z "$SERVER_URL" ]]; then
-  # Try to generate a domain if none exists
-  railway domain generate 2>/dev/null || true
-  sleep 3
-  SERVER_URL=$(railway domain 2>/dev/null | grep -Eo 'https://[^ ]+' | head -1 || echo "")
-fi
+# Generate a domain if none exists, then grab it
+railway domain --service server 2>/dev/null || true
+sleep 3
+SERVER_URL=$(railway domain --service server --json 2>/dev/null | grep -Eo '"domain":"[^"]+"' | head -1 | cut -d'"' -f4 || echo "")
+[[ -n "$SERVER_URL" ]] && SERVER_URL="https://$SERVER_URL"
 
 if [[ -z "$SERVER_URL" ]]; then
   echo "  ⚠ Could not detect Railway URL automatically."
