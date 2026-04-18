@@ -77,28 +77,42 @@ function removeVoiceSocket(socketId: string, roomId: string): boolean {
   return existed
 }
 
-function subRoomId(slug: string, n: number): string {
+export function subRoomId(slug: string, n: number): string {
   return `problem:${slug}:${n}`
 }
 
-function getProblemSubRooms(slug: string): SubRoomInfo[] {
+export function summarizeProblemSubRooms(
+  roomEntries: Array<{ roomId: string; userCount: number }>,
+  slug: string,
+  capacity = ROOM_CAPACITY,
+): SubRoomInfo[] {
   const prefix = `problem:${slug}:`
   const result: SubRoomInfo[] = []
-  for (const [roomId] of rooms.entries()) {
+  for (const { roomId, userCount } of roomEntries) {
     if (roomId.startsWith(prefix)) {
       const number = parseInt(roomId.split(':')[2] ?? '0', 10)
-      result.push({ number, userCount: getRoomUsers(roomId).length, capacity: ROOM_CAPACITY })
+      result.push({ number, userCount, capacity })
     }
   }
   return result.sort((a, b) => a.number - b.number)
 }
 
-function autoAssignRoom(slug: string): number {
-  const subRooms = getProblemSubRooms(slug)
+export function pickAutoRoom(subRooms: SubRoomInfo[]): number {
   for (const { number, userCount } of subRooms) {
     if (userCount < ROOM_CAPACITY) return number
   }
   return (subRooms[subRooms.length - 1]?.number ?? 0) + 1
+}
+
+function getProblemSubRooms(slug: string): SubRoomInfo[] {
+  return summarizeProblemSubRooms(
+    [...rooms.entries()].map(([roomId]) => ({ roomId, userCount: getRoomUsers(roomId).length })),
+    slug,
+  )
+}
+
+function autoAssignRoom(slug: string): number {
+  return pickAutoRoom(getProblemSubRooms(slug))
 }
 
 export function createSocketServer(httpServer: HttpServer): Server {
