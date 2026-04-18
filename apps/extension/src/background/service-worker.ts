@@ -167,6 +167,19 @@ function handleMessage(
 // ─── Auth handlers ────────────────────────────────────────────────────────────
 
 async function initiateGoogleAuth(sendResponse: (r: MessageResponse) => void): Promise<void> {
+  // Keep the service worker alive while the user completes the Google sign-in.
+  // MV3 service workers can be terminated after ~30s of inactivity; the user
+  // may take longer than that to pick their account.
+  const KEEPALIVE_ALARM = 'lc-auth-keepalive'
+  chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.4 })
+  chrome.alarms.onAlarm.addListener(function keepAlive(alarm) {
+    if (alarm.name === KEEPALIVE_ALARM) {
+      // Re-registering keeps the service worker from sleeping
+    } else {
+      chrome.alarms.onAlarm.removeListener(keepAlive)
+    }
+  })
+
   try {
     // Get the extension's OAuth redirect URL (e.g. https://[id].chromiumapp.org/)
     const redirectUri = chrome.identity.getRedirectURL()
@@ -212,6 +225,8 @@ async function initiateGoogleAuth(sendResponse: (r: MessageResponse) => void): P
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     sendResponse({ ok: false, error: message })
+  } finally {
+    chrome.alarms.clear(KEEPALIVE_ALARM)
   }
 }
 

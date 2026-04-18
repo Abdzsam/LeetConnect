@@ -45,6 +45,27 @@ export function buildTokenRedirect(
   return url.toString()
 }
 
+// ─── In-memory OAuth state store (replaces cookie-based approach) ────────────
+// chrome.identity.launchWebAuthFlow uses a sandboxed cookie context, so cookies
+// set during /auth/google are not reliably available during /auth/google/callback.
+// An in-memory Map avoids this entirely.
+
+interface OAuthSession {
+  codeVerifier: string
+  redirectUri: string
+  expiresAt: number
+}
+
+const oauthStateStore = new Map<string, OAuthSession>()
+
+// Prune expired sessions every 5 minutes
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, session] of oauthStateStore) {
+    if (session.expiresAt < now) oauthStateStore.delete(key)
+  }
+}, 5 * 60 * 1000)
+
 // ─── Google user info shape ───────────────────────────────────────────────────
 
 interface GoogleUserInfo {
@@ -75,17 +96,11 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
       const state = generateState()
       const codeVerifier = generateCodeVerifier()
 
-      // Store { codeVerifier, redirectUri } in a short-lived httpOnly cookie
-      // Cookie name includes the state for uniqueness
-      const cookieName = `lc_oauth_${state}`
-      const cookieValue = JSON.stringify({ codeVerifier, redirectUri })
-
-      reply.setCookie(cookieName, cookieValue, {
-        httpOnly: true,
-        secure: process.env['NODE_ENV'] === 'production',
-        sameSite: 'lax',
-        maxAge: 600, // 10 minutes
-        path: '/',
+      // Store session in memory (10 minute TTL)
+      oauthStateStore.set(state, {
+        codeVerifier,
+        redirectUri,
+        expiresAt: Date.now() + 10 * 60 * 1000,
       })
 
       // Build the Google authorization URL with PKCE
@@ -112,32 +127,19 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
         return
       }
 
-      // Recover state cookie
-      const cookieName = `lc_oauth_${state}`
-      const rawCookie = request.cookies?.[cookieName]
+      // Recover and consume the session from the in-memory store
+      const session = oauthStateStore.get(state)
+      oauthStateStore.delete(state)
 
-      if (!rawCookie) {
+      if (!session) {
         reply.code(400).send({ ok: false, error: 'OAuth state mismatch or session expired' })
         return
       }
 
-      // Parse stored session data
-      let session: { codeVerifier: string; redirectUri: string }
-      try {
-        session = JSON.parse(rawCookie) as { codeVerifier: string; redirectUri: string }
-        if (
-          typeof session.codeVerifier !== 'string' ||
-          typeof session.redirectUri !== 'string'
-        ) {
-          throw new Error('Malformed session cookie')
-        }
-      } catch {
-        reply.code(400).send({ ok: false, error: 'Invalid OAuth session cookie' })
+      if (session.expiresAt < Date.now()) {
+        reply.code(400).send({ ok: false, error: 'OAuth session expired, please try again' })
         return
       }
-
-      // Clear the cookie
-      reply.clearCookie(cookieName, { path: '/' })
 
       // Exchange code for tokens
       let tokens

@@ -39,7 +39,7 @@ export default defineManifest({
     extension_pages: "script-src 'self'; object-src 'self'",
   },
 
-  permissions: ['storage', 'activeTab', 'identity'],
+  permissions: ['storage', 'activeTab', 'identity', 'alarms'],
 
   web_accessible_resources: [
     {
