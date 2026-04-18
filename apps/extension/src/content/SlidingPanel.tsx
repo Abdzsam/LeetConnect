@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
+import { AuthGate } from './AuthGate'
+import { useAuth } from '../hooks/useAuth'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -477,6 +479,7 @@ const ChevronIcon: React.FC<{ open: boolean }> = ({ open }) => (
 
 export const SlidingPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
+  const { state, signOut } = useAuth()
 
   const toggle = useCallback(() => setIsOpen((v) => !v), [])
 
@@ -603,7 +606,7 @@ export const SlidingPanel: React.FC = () => {
           >
             LC
           </div>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
                 fontSize: 15,
@@ -624,28 +627,81 @@ export const SlidingPanel: React.FC = () => {
                 alignItems: 'center',
                 gap: 5,
                 marginTop: 2,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}
             >
-              <span
-                style={{
-                  display: 'inline-block',
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  backgroundColor: '#22c55e',
-                  animation: 'lc-pulse 2s ease-in-out infinite',
-                }}
-              />
-              {MOCK_USERS.length} online
+              {state.status === 'authenticated' ? (
+                <>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      backgroundColor: '#22c55e',
+                      flexShrink: 0,
+                    }}
+                  />
+                  {state.user.name}
+                </>
+              ) : (
+                <>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      backgroundColor: '#22c55e',
+                      animation: 'lc-pulse 2s ease-in-out infinite',
+                      flexShrink: 0,
+                    }}
+                  />
+                  {MOCK_USERS.length} online
+                </>
+              )}
             </div>
           </div>
+
+          {/* Sign-out button (only when authenticated) */}
+          {state.status === 'authenticated' && (
+            <button
+              type="button"
+              onClick={signOut}
+              aria-label="Sign out"
+              title="Sign out"
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 8,
+                background: 'rgba(255,255,255,0.07)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 150ms',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.15)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </button>
+          )}
+
           {/* Close button */}
           <button
             type="button"
             onClick={toggle}
             aria-label="Close panel"
             style={{
-              marginLeft: 'auto',
               width: 28,
               height: 28,
               borderRadius: 8,
@@ -658,12 +714,8 @@ export const SlidingPanel: React.FC = () => {
               transition: 'background 150ms',
               flexShrink: 0,
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.13)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.07)'
-            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.13)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -682,9 +734,11 @@ export const SlidingPanel: React.FC = () => {
             padding: '14px 14px 8px',
           }}
         >
-          <OnlineSection />
-          <ChatSection />
-          <VoiceSection />
+          <AuthGate>
+            <OnlineSection />
+            <ChatSection />
+            <VoiceSection />
+          </AuthGate>
         </div>
 
         {/* Footer */}
