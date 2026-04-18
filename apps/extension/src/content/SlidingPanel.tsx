@@ -324,60 +324,125 @@ const ChatSection: React.FC<{
 
 // ─── Voice section (stub) ─────────────────────────────────────────────────────
 
-const VoiceSection: React.FC = () => {
-  const [joined, setJoined] = useState(false)
-  return (
-    <SectionCard
-      title="Voice Channel"
+const VoiceSection: React.FC<{
+  joined: boolean
+  connecting: boolean
+  muted: boolean
+  participants: RoomUser[]
+  error: string | null
+  onJoin: () => void
+  onLeave: () => void
+  onToggleMute: () => void
+}> = ({ joined, connecting, muted, participants, error, onJoin, onLeave, onToggleMute }) => {
+    return (
+      <SectionCard
+        title="Voice Channel"
       icon={
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
           <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
         </svg>
       }
-    >
-      <div style={{ textAlign: 'center', paddingBottom: 4 }}>
-        {joined && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 4, marginBottom: 12, alignItems: 'flex-end', height: 24 }}>
-            {[3, 6, 4, 8, 5, 7, 3].map((h, i) => (
+      >
+        <div style={{ textAlign: 'center', paddingBottom: 4 }}>
+          <p style={{ fontSize: 11, color: '#a78bfa', marginTop: 0, marginBottom: 8, fontFamily: 'system-ui, sans-serif', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            {participants.length} {participants.length === 1 ? 'person' : 'people'} in voice
+          </p>
+          {joined && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 4, marginBottom: 12, alignItems: 'flex-end', height: 24 }}>
+              {[3, 6, 4, 8, 5, 7, 3].map((h, i) => (
               <div
                 key={i}
                 style={{ width: 3, height: h * 2, borderRadius: 2, background: 'linear-gradient(180deg, #7c3aed, #4f46e5)', animation: `lc-pulse ${0.8 + i * 0.15}s ease-in-out infinite` }}
               />
             ))}
-          </div>
-        )}
-        <p style={{ fontSize: 12, color: joined ? '#22c55e' : '#9ca3af', marginBottom: 12, fontFamily: 'system-ui, sans-serif', lineHeight: 1.5 }}>
-          {joined ? 'Connected to general' : 'Join a voice channel to talk with others.'}
-        </p>
-        <button
-          type="button"
-          onClick={() => setJoined((v) => !v)}
-          style={{
-            width: '100%',
-            padding: '8px 0',
-            borderRadius: 8,
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: 600,
-            fontFamily: 'system-ui, sans-serif',
-            background: joined ? 'rgba(239,68,68,0.2)' : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-            color: joined ? '#fca5a5' : '#fff',
-          }}
-        >
-          {joined ? 'Leave Channel' : 'Join Voice Channel'}
-        </button>
-      </div>
-    </SectionCard>
-  )
-}
+            </div>
+          )}
+          <p style={{ fontSize: 12, color: joined ? '#22c55e' : '#9ca3af', marginBottom: 12, fontFamily: 'system-ui, sans-serif', lineHeight: 1.5 }}>
+            {joined ? (muted ? 'Connected, microphone muted.' : 'Connected, microphone live.') : 'Join the room voice call for this problem.'}
+          </p>
+          {error && (
+            <div
+              style={{
+                background: 'rgba(239,68,68,0.12)',
+                border: '1px solid rgba(239,68,68,0.25)',
+                borderRadius: 8,
+                padding: '8px 10px',
+                marginBottom: 12,
+                fontSize: 11,
+                color: '#fca5a5',
+                fontFamily: 'system-ui, sans-serif',
+                lineHeight: 1.5,
+              }}
+            >
+              {error}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={joined ? onLeave : onJoin}
+            disabled={connecting}
+            style={{
+              width: '100%',
+              padding: '8px 0',
+              borderRadius: 8,
+              border: 'none',
+              cursor: connecting ? 'wait' : 'pointer',
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: 'system-ui, sans-serif',
+              background: joined ? 'rgba(239,68,68,0.2)' : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+              color: joined ? '#fca5a5' : '#fff',
+              opacity: connecting ? 0.7 : 1,
+              marginBottom: joined ? 8 : 0,
+            }}
+          >
+          {connecting ? 'Joining Voice…' : joined ? 'Leave Channel' : 'Join Voice Channel'}
+          </button>
+          {joined && (
+            <button
+              type="button"
+              onClick={onToggleMute}
+              style={{
+                width: '100%',
+                padding: '8px 0',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.12)',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+                fontFamily: 'system-ui, sans-serif',
+                background: 'rgba(255,255,255,0.06)',
+                color: muted ? '#fca5a5' : '#d1d5db',
+              }}
+            >
+              {muted ? 'Unmute Microphone' : 'Mute Microphone'}
+            </button>
+          )}
+        </div>
+      </SectionCard>
+    )
+  }
 
 // ─── Problem room content (rendered inside AuthGate) ──────────────────────────
 
 const ProblemRoomContent: React.FC = () => {
   const { state } = useAuth()
-  const { roomUsers, messages, connected, problemSlug, sendMessage } = useProblemRoom()
+  const {
+    roomUsers,
+    messages,
+    connected,
+    problemSlug,
+    sendMessage,
+    voiceParticipants,
+    voiceJoined,
+    voiceConnecting,
+    voiceMuted,
+    voiceError,
+    joinVoice,
+    leaveVoice,
+    toggleMute,
+  } = useProblemRoom()
 
   if (state.status !== 'authenticated') return null
 
@@ -409,7 +474,16 @@ const ProblemRoomContent: React.FC = () => {
 
       <OnlineSection users={roomUsers} currentUserId={state.user.id} />
       <ChatSection messages={messages} onSend={sendMessage} currentUserId={state.user.id} />
-      <VoiceSection />
+      <VoiceSection
+        joined={voiceJoined}
+        connecting={voiceConnecting}
+        muted={voiceMuted}
+        participants={voiceParticipants.map((entry) => entry.user)}
+        error={voiceError}
+        onJoin={joinVoice}
+        onLeave={leaveVoice}
+        onToggleMute={toggleMute}
+      />
     </>
   )
 }
