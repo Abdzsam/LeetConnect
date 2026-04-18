@@ -19,6 +19,7 @@ import { vi } from 'vitest'
       set: vi.fn(),
       remove: vi.fn(),
     },
+    onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
   },
   identity: {
     getRedirectURL: vi.fn(() => 'https://abcdefghijklmnopqrstuvwxyzabcdef.chromiumapp.org/'),
