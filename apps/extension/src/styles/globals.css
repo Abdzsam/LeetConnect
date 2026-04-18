@@ -2,34 +2,84 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Reset within our shadow DOM */
-*, *::before, *::after {
-  box-sizing: border-box;
+/* Reset styles for shadow DOM isolation */
+:host {
+  all: initial;
+  display: block;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
+/* Smooth scrollbar for panel content */
+.lc-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 58, 237, 0.4) transparent;
+}
+
+.lc-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
-::-webkit-scrollbar-track {
+
+.lc-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
-::-webkit-scrollbar-thumb {
-  background: #4e5058;
-  border-radius: 4px;
+
+.lc-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(124, 58, 237, 0.4);
+  border-radius: 2px;
 }
 
-/* Sidebar host */
-#lc-sidebar-host {
-  position: fixed;
-  top: 0;
-  right: 0;
-  height: 100vh;
-  z-index: 2147483647;
-  pointer-events: none;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+.lc-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(124, 58, 237, 0.7);
 }
 
-#lc-sidebar-host * {
-  pointer-events: auto;
+/* Panel slide animation */
+.lc-panel-wrapper {
+  transition: transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* Tab handle hover effect */
+.lc-tab-handle {
+  transition: filter 200ms ease, transform 200ms ease, box-shadow 200ms ease;
+}
+
+.lc-tab-handle:hover {
+  filter: brightness(1.15);
+  transform: scaleY(1.05);
+  box-shadow: 0 4px 32px rgba(124, 58, 237, 0.6) !important;
+}
+
+/* Chevron rotation */
+.lc-chevron {
+  transition: transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lc-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Pulse indicator for online status */
+@keyframes lc-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.lc-pulse {
+  animation: lc-pulse 2s ease-in-out infinite;
+}
+
+/* Shimmer loading effect */
+@keyframes lc-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.lc-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.03) 25%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: lc-shimmer 1.5s infinite;
 }

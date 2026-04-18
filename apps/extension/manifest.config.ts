@@ -1,44 +1,50 @@
-import { defineManifest } from "@crxjs/vite-plugin";
+import { defineManifest } from '@crxjs/vite-plugin'
 
 export default defineManifest({
   manifest_version: 3,
-  name: "LeetConnect",
-  version: "0.1.0",
-  description:
-    "Connect with other LeetCode users on the same problem — chat, voice, and video.",
+  name: 'LeetConnect',
+  version: '0.1.0',
+  description: 'Real-time collaboration panel for LeetCode — chat, presence, and voice with fellow coders.',
+
   icons: {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png",
+    16: 'icons/icon16.png',
+    48: 'icons/icon48.png',
+    128: 'icons/icon128.png',
   },
+
   action: {
-    default_popup: "src/popup/index.html",
+    default_popup: 'src/popup/index.html',
+    default_title: 'LeetConnect',
     default_icon: {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
+      16: 'icons/icon16.png',
+      48: 'icons/icon48.png',
     },
   },
+
   background: {
-    service_worker: "src/background/service-worker.ts",
-    type: "module",
+    service_worker: 'src/background/service-worker.ts',
+    type: 'module',
   },
+
   content_scripts: [
     {
-      matches: ["https://leetcode.com/problems/*"],
-      js: ["src/content/index.tsx"],
-      run_at: "document_idle",
+      matches: ['<all_urls>'],
+      js: ['src/content/index.tsx'],
+      run_at: 'document_idle',
     },
   ],
-  permissions: ["storage", "identity", "alarms", "notifications"],
-  host_permissions: [
-    "https://leetcode.com/problems/*",
-    "http://localhost:3001/*",
-    "https://api.leetconnect.dev/*",
-  ],
+
+  // Strict CSP — no unsafe-inline, no unsafe-eval
+  content_security_policy: {
+    extension_pages: "script-src 'self'; object-src 'self'",
+  },
+
+  permissions: ['storage', 'activeTab'],
+
   web_accessible_resources: [
     {
-      resources: ["assets/*"],
-      matches: ["https://leetcode.com/*"],
+      resources: ['icons/*'],
+      matches: ['<all_urls>'],
     },
   ],
-});
+})

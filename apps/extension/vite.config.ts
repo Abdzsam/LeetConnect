@@ -1,20 +1,18 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { crx } from "@crxjs/vite-plugin";
-import manifest from "./manifest.config.js";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.config'
 
 export default defineConfig({
-  plugins: [react(), crx({ manifest })],
+  plugins: [
+    react(),
+    crx({ manifest }),
+  ],
   build: {
-    target: "es2022",
     sourcemap: true,
+    // Ensure inline assets work for shadow DOM style injection
+    assetsInlineLimit: 0,
   },
-  define: {
-    "process.env.VITE_API_URL": JSON.stringify(
-      process.env["VITE_API_URL"] ?? "http://localhost:3001"
-    ),
-    "process.env.VITE_SOCKET_URL": JSON.stringify(
-      process.env["VITE_SOCKET_URL"] ?? "ws://localhost:3001"
-    ),
-  },
-});
+  // Allow ?inline imports for CSS (used by shadow DOM style injection)
+  assetsInclude: [],
+})

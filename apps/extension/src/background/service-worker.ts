@@ -1,133 +1,180 @@
-import { getTokens, setTokens, clearTokens } from "../lib/storage.js";
+/**
+ * MV3 Service Worker — LeetConnect background script.
+ *
+ * Security principles enforced here:
+ *   - All chrome.runtime.onMessage listeners validate the sender's extension ID
+ *     against chrome.runtime.id before acting on any message.
+ *   - External messages (onMessageExternal) are rejected by default.
+ *   - No eval(), no Function(), no dynamic code execution.
+ *   - Storage writes are validated before persisting.
+ */
 
-const API_URL =
-  (import.meta.env["VITE_API_URL"] as string | undefined) ??
-  "http://localhost:3001";
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-// ── Auth alarm ────────────────────────────────────────────────────────────────
+type InternalMessage =
+  | { type: 'GET_AUTH_STATUS' }
+  | { type: 'SET_AUTH_TOKEN'; token: string }
+  | { type: 'CLEAR_AUTH' }
+  | { type: 'PING' }
 
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === "refresh_token") {
-    await tryRefreshToken();
+type MessageResponse =
+  | { ok: true; data?: unknown }
+  | { ok: false; error: string }
+
+// ─── Lifecycle ────────────────────────────────────────────────────────────────
+
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === chrome.runtime.OnInstalledReason.INSTALL) {
+    console.info('[LeetConnect] Extension installed.')
+    // Initialise default storage values
+    chrome.storage.local.set({
+      authToken: null,
+      userId: null,
+      installedAt: Date.now(),
+    }).catch((err: unknown) => {
+      console.error('[LeetConnect] Failed to initialise storage:', err)
+    })
   }
-});
 
-async function tryRefreshToken() {
-  const tokens = await getTokens();
-  if (!tokens) return;
+  if (reason === chrome.runtime.OnInstalledReason.UPDATE) {
+    console.info('[LeetConnect] Extension updated.')
+  }
+})
 
-  // Refresh 2 minutes before expiry
-  if (tokens.expiresAt - Date.now() > 2 * 60 * 1000) return;
+// ─── Internal message handler ─────────────────────────────────────────────────
 
-  try {
-    const res = await fetch(`${API_URL}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken: tokens.refreshToken }),
-    });
-
-    if (!res.ok) {
-      await clearTokens();
-      return;
+chrome.runtime.onMessage.addListener(
+  (
+    message: unknown,
+    sender: chrome.runtime.MessageSender,
+    sendResponse: (response: MessageResponse) => void,
+  ): boolean => {
+    // ── Validate sender ──────────────────────────────────────────────────────
+    // Only accept messages from our own extension (content scripts, popup).
+    // Reject anything from web pages or other extensions.
+    if (sender.id !== chrome.runtime.id) {
+      sendResponse({ ok: false, error: 'Unauthorized sender' })
+      return false
     }
 
-    const data = (await res.json()) as {
-      accessToken: string;
-      expiresAt: number;
-    };
+    // Reject messages that arrive from a tab URL that is external
+    // (content scripts have sender.tab; popup does not — both are fine)
+    if (sender.url && !sender.url.startsWith('chrome-extension://')) {
+      sendResponse({ ok: false, error: 'Untrusted sender URL' })
+      return false
+    }
 
-    const updated = {
-      ...tokens,
-      accessToken: data.accessToken,
-      expiresAt: data.expiresAt,
-    };
-    await setTokens(updated);
+    // ── Type-check message ────────────────────────────────────────────────────
+    if (!isInternalMessage(message)) {
+      sendResponse({ ok: false, error: 'Unknown message type' })
+      return false
+    }
 
-    // Notify all content scripts of the new token
-    const tabs = await chrome.tabs.query({ url: "https://leetcode.com/*" });
-    for (const tab of tabs) {
-      if (tab.id) {
-        chrome.tabs
-          .sendMessage(tab.id, { type: "AUTH_TOKENS", tokens: updated })
-          .catch(() => void 0); // tab may not have content script
+    // ── Dispatch ──────────────────────────────────────────────────────────────
+    handleMessage(message, sendResponse)
+
+    // Return true to indicate we will call sendResponse asynchronously
+    return true
+  },
+)
+
+// ─── Reject all external messages ─────────────────────────────────────────────
+
+chrome.runtime.onMessageExternal.addListener(
+  (
+    _message: unknown,
+    _sender: chrome.runtime.MessageSender,
+    sendResponse: (response: MessageResponse) => void,
+  ) => {
+    sendResponse({ ok: false, error: 'External messages not accepted' })
+    return false
+  },
+)
+
+// ─── Message dispatcher ───────────────────────────────────────────────────────
+
+function handleMessage(
+  message: InternalMessage,
+  sendResponse: (response: MessageResponse) => void,
+): void {
+  switch (message.type) {
+    case 'PING': {
+      sendResponse({ ok: true, data: { pong: true, ts: Date.now() } })
+      break
+    }
+
+    case 'GET_AUTH_STATUS': {
+      chrome.storage.local
+        .get(['authToken', 'userId'])
+        .then((result) => {
+          sendResponse({
+            ok: true,
+            data: {
+              authenticated: Boolean(result['authToken']),
+              userId: result['userId'] ?? null,
+            },
+          })
+        })
+        .catch((err: unknown) => {
+          console.error('[LeetConnect] Storage read error:', err)
+          sendResponse({ ok: false, error: 'Storage error' })
+        })
+      break
+    }
+
+    case 'SET_AUTH_TOKEN': {
+      // Validate token before storing — must be a non-empty string
+      const token = message.token
+      if (typeof token !== 'string' || token.trim().length === 0) {
+        sendResponse({ ok: false, error: 'Invalid token' })
+        break
       }
+      // Sanitise: only accept tokens that look like JWTs (three base64url segments)
+      const JWT_PATTERN = /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/
+      if (!JWT_PATTERN.test(token)) {
+        sendResponse({ ok: false, error: 'Token format invalid' })
+        break
+      }
+      chrome.storage.local
+        .set({ authToken: token })
+        .then(() => sendResponse({ ok: true }))
+        .catch((err: unknown) => {
+          console.error('[LeetConnect] Storage write error:', err)
+          sendResponse({ ok: false, error: 'Storage error' })
+        })
+      break
     }
-  } catch {
-    // Network error — will retry on next alarm
+
+    case 'CLEAR_AUTH': {
+      chrome.storage.local
+        .remove(['authToken', 'userId'])
+        .then(() => sendResponse({ ok: true }))
+        .catch((err: unknown) => {
+          console.error('[LeetConnect] Storage clear error:', err)
+          sendResponse({ ok: false, error: 'Storage error' })
+        })
+      break
+    }
+
+    default: {
+      // Exhaustiveness check — TypeScript will warn if a case is missing
+      const _exhaustive: never = message
+      void _exhaustive
+      sendResponse({ ok: false, error: 'Unhandled message type' })
+    }
   }
 }
 
-// ── Message handlers ──────────────────────────────────────────────────────────
+// ─── Type guard ───────────────────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type === "SIGN_IN") {
-    void handleSignIn().then((result) => sendResponse(result));
-    return true; // keep channel open for async response
-  }
-
-  if (message.type === "SIGN_OUT") {
-    void clearTokens().then(() => {
-      chrome.alarms.clear("refresh_token");
-      sendResponse({ success: true });
-    });
-    return true;
-  }
-});
-
-async function handleSignIn(): Promise<{ success: boolean; error?: string }> {
-  const redirectUrl = chrome.identity.getRedirectURL("oauth2");
-  const authUrl = `${API_URL}/auth/google?redirect_uri=${encodeURIComponent(redirectUrl)}`;
-
-  try {
-    const responseUrl = await chrome.identity.launchWebAuthFlow({
-      url: authUrl,
-      interactive: true,
-    });
-
-    if (!responseUrl) {
-      return { success: false, error: "No response URL" };
-    }
-
-    // Parse tokens from the URL fragment
-    const fragment = new URL(responseUrl).hash.slice(1);
-    const tokens = JSON.parse(decodeURIComponent(fragment)) as {
-      accessToken: string;
-      refreshToken: string;
-      expiresAt: number;
-    };
-
-    await setTokens(tokens);
-
-    // Schedule token refresh
-    chrome.alarms.create("refresh_token", { periodInMinutes: 1 });
-
-    // Notify all content scripts
-    const tabs = await chrome.tabs.query({ url: "https://leetcode.com/*" });
-    for (const tab of tabs) {
-      if (tab.id) {
-        chrome.tabs
-          .sendMessage(tab.id, { type: "AUTH_TOKENS", tokens })
-          .catch(() => void 0);
-      }
-    }
-
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: String(err) };
-  }
+function isInternalMessage(value: unknown): value is InternalMessage {
+  if (typeof value !== 'object' || value === null) return false
+  const obj = value as Record<string, unknown>
+  const validTypes = new Set<string>([
+    'GET_AUTH_STATUS',
+    'SET_AUTH_TOKEN',
+    'CLEAR_AUTH',
+    'PING',
+  ])
+  return typeof obj['type'] === 'string' && validTypes.has(obj['type'])
 }
-
-// On install / startup, schedule refresh alarm if we have tokens
-chrome.runtime.onInstalled.addListener(async () => {
-  const tokens = await getTokens();
-  if (tokens) {
-    chrome.alarms.create("refresh_token", { periodInMinutes: 1 });
-  }
-});
-
-chrome.runtime.onStartup.addListener(async () => {
-  const tokens = await getTokens();
-  if (tokens) {
-    chrome.alarms.create("refresh_token", { periodInMinutes: 1 });
-  }
-});
