@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { AuthGate } from './AuthGate'
 import { useAuth } from '../hooks/useAuth'
-import { useProblemRoom, type RoomUser, type RoomMessage } from '../hooks/useProblemRoom'
+import { useProblemRoom, type RoomUser, type RoomMessage, type SubRoomInfo } from '../hooks/useProblemRoom'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -131,60 +131,113 @@ const NoProblemPlaceholder: React.FC = () => (
 
 // ─── Online users section ─────────────────────────────────────────────────────
 
-const OnlineSection: React.FC<{ users: RoomUser[]; currentUserId: string }> = ({ users, currentUserId }) => (
-  <SectionCard
-    title="Online Now"
-    icon={
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="12" cy="8" r="4" />
-        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-      </svg>
-    }
-    badge={users.length}
-  >
-    {users.length === 0 ? (
-      <p style={{ fontSize: 12, color: '#6b7280', fontFamily: 'system-ui, sans-serif', margin: 0 }}>
-        No one else is here yet.
-      </p>
-    ) : (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {users.map((user) => (
-          <div key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Avatar name={user.name} url={user.avatarUrl} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span
-                  style={{
-                    display: 'inline-block',
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    background: '#22c55e',
-                    flexShrink: 0,
-                    animation: 'lc-pulse 2s ease-in-out infinite',
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: user.id === currentUserId ? '#a78bfa' : '#f3f4f6',
-                    fontFamily: 'system-ui, sans-serif',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {user.name}{user.id === currentUserId ? ' (you)' : ''}
-                </span>
+const OnlineSection: React.FC<{
+  users: RoomUser[]
+  currentUserId: string
+  currentRoomNumber: number | null
+  availableRooms: SubRoomInfo[]
+  onJoinRoom: (n: number) => void
+}> = ({ users, currentUserId, currentRoomNumber, availableRooms, onJoinRoom }) => {
+  const [showRooms, setShowRooms] = useState(false)
+
+  return (
+    <SectionCard
+      title={currentRoomNumber !== null ? `Room ${currentRoomNumber}` : 'Online Now'}
+      icon={
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+        </svg>
+      }
+      badge={users.length}
+    >
+      {/* Room switcher */}
+      {availableRooms.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <button
+            type="button"
+            onClick={() => setShowRooms((v) => !v)}
+            style={{
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 6,
+              padding: '4px 10px',
+              fontSize: 11,
+              color: '#9ca3af',
+              cursor: 'pointer',
+              fontFamily: 'system-ui, sans-serif',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+            </svg>
+            {showRooms ? 'Hide rooms' : 'Switch room'}
+          </button>
+
+          {showRooms && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {availableRooms.map((room) => {
+                const isCurrent = room.number === currentRoomNumber
+                const isFull = room.userCount >= room.capacity
+                return (
+                  <button
+                    key={room.number}
+                    type="button"
+                    disabled={isCurrent || isFull}
+                    onClick={() => { onJoinRoom(room.number); setShowRooms(false) }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: isCurrent ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${isCurrent ? 'rgba(124,58,237,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                      borderRadius: 6,
+                      padding: '5px 10px',
+                      cursor: isCurrent || isFull ? 'default' : 'pointer',
+                      opacity: isFull && !isCurrent ? 0.5 : 1,
+                    }}
+                  >
+                    <span style={{ fontSize: 12, color: isCurrent ? '#c4b5fd' : '#d1d5db', fontFamily: 'system-ui, sans-serif', fontWeight: isCurrent ? 600 : 400 }}>
+                      Room {room.number}{isCurrent ? ' (you)' : ''}
+                    </span>
+                    <span style={{ fontSize: 11, color: '#6b7280', fontFamily: 'system-ui, sans-serif' }}>
+                      {room.userCount}/{room.capacity}{isFull ? ' full' : ''}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {users.length === 0 ? (
+        <p style={{ fontSize: 12, color: '#6b7280', fontFamily: 'system-ui, sans-serif', margin: 0 }}>
+          No one else is here yet.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {users.map((user) => (
+            <div key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Avatar name={user.name} url={user.avatarUrl} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0, animation: 'lc-pulse 2s ease-in-out infinite' }} />
+                  <span style={{ fontSize: 13, fontWeight: 500, color: user.id === currentUserId ? '#a78bfa' : '#f3f4f6', fontFamily: 'system-ui, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user.name}{user.id === currentUserId ? ' (you)' : ''}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </SectionCard>
-)
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  )
+}
 
 // ─── Chat section ─────────────────────────────────────────────────────────────
 
@@ -377,7 +430,7 @@ const VoiceSection: React.FC = () => {
 
 const ProblemRoomContent: React.FC = () => {
   const { state } = useAuth()
-  const { roomUsers, messages, connected, problemSlug, sendMessage } = useProblemRoom()
+  const { roomUsers, messages, connected, problemSlug, currentRoomNumber, availableRooms, sendMessage, joinRoom } = useProblemRoom()
 
   if (state.status !== 'authenticated') return null
 
@@ -385,7 +438,6 @@ const ProblemRoomContent: React.FC = () => {
 
   return (
     <>
-      {/* Connection status banner */}
       {!connected && (
         <div
           style={{
@@ -407,7 +459,13 @@ const ProblemRoomContent: React.FC = () => {
         </div>
       )}
 
-      <OnlineSection users={roomUsers} currentUserId={state.user.id} />
+      <OnlineSection
+        users={roomUsers}
+        currentUserId={state.user.id}
+        currentRoomNumber={currentRoomNumber}
+        availableRooms={availableRooms}
+        onJoinRoom={joinRoom}
+      />
       <ChatSection messages={messages} onSend={sendMessage} currentUserId={state.user.id} />
       <VoiceSection />
     </>

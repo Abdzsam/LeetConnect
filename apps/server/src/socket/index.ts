@@ -5,6 +5,8 @@ import { db } from '../db/index.js'
 import { problemMessages, users } from '../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
 
+const ROOM_CAPACITY = 15
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface SocketUser {
@@ -16,6 +18,12 @@ interface SocketUser {
 interface RoomPresence {
   socketId: string
   user: SocketUser
+}
+
+export interface SubRoomInfo {
+  number: number
+  userCount: number
+  capacity: number
 }
 
 // ─── In-memory presence store: roomId → (socketId → presence) ────────────────
@@ -47,6 +55,30 @@ function removeSocket(socketId: string, roomId: string): { userGone: boolean; us
   if (room.size === 0) rooms.delete(roomId)
   const userStillPresent = [...(rooms.get(roomId)?.values() ?? [])].some((p) => p.user.id === userId)
   return { userGone: !userStillPresent, userId }
+}
+
+function subRoomId(slug: string, n: number): string {
+  return `problem:${slug}:${n}`
+}
+
+function getProblemSubRooms(slug: string): SubRoomInfo[] {
+  const prefix = `problem:${slug}:`
+  const result: SubRoomInfo[] = []
+  for (const [roomId] of rooms.entries()) {
+    if (roomId.startsWith(prefix)) {
+      const number = parseInt(roomId.split(':')[2] ?? '0', 10)
+      result.push({ number, userCount: getRoomUsers(roomId).length, capacity: ROOM_CAPACITY })
+    }
+  }
+  return result.sort((a, b) => a.number - b.number)
+}
+
+function autoAssignRoom(slug: string): number {
+  const subRooms = getProblemSubRooms(slug)
+  for (const { number, userCount } of subRooms) {
+    if (userCount < ROOM_CAPACITY) return number
+  }
+  return (subRooms[subRooms.length - 1]?.number ?? 0) + 1
 }
 
 // ─── Socket.io server factory ─────────────────────────────────────────────────
@@ -92,27 +124,48 @@ export function createSocketServer(httpServer: HttpServer): Server {
   // ── Connection handler ───────────────────────────────────────────────────────
   io.on('connection', (socket) => {
     const user = socket.data['user'] as SocketUser
-    let currentRoomId: string | null = null
+    let currentRoomId: string | null = null   // e.g. "problem:two-sum:1"
+    let currentSlug: string | null = null     // e.g. "two-sum"
 
     // ── join_room ──────────────────────────────────────────────────────────────
-    socket.on('join_room', async ({ problemSlug }: { problemSlug?: unknown }) => {
+    socket.on('join_room', async ({ problemSlug, roomNumber }: { problemSlug?: unknown; roomNumber?: unknown }) => {
       if (typeof problemSlug !== 'string' || !/^[a-z0-9-]+$/i.test(problemSlug)) return
+      const slug = problemSlug.toLowerCase()
 
-      // Leave previous room
-      if (currentRoomId) {
+      // Leave previous sub-room
+      if (currentRoomId && currentSlug) {
         const { userGone, userId } = removeSocket(socket.id, currentRoomId)
         if (userGone) socket.to(currentRoomId).emit('user_left', { id: userId })
         socket.leave(currentRoomId)
+        io.to(`problem:${currentSlug}`).emit('rooms_updated', getProblemSubRooms(currentSlug))
       }
 
-      const roomId = `problem:${problemSlug.toLowerCase()}`
+      // Determine target room number
+      const targetNumber =
+        typeof roomNumber === 'number' && Number.isInteger(roomNumber) && roomNumber >= 1
+          ? roomNumber
+          : autoAssignRoom(slug)
+
+      // Reject manual join if room is full
+      if (typeof roomNumber === 'number') {
+        const count = getRoomUsers(subRoomId(slug, targetNumber)).length
+        if (count >= ROOM_CAPACITY) {
+          socket.emit('room_full', { roomNumber: targetNumber })
+          return
+        }
+      }
+
+      const roomId = subRoomId(slug, targetNumber)
       currentRoomId = roomId
+      currentSlug = slug
+
       await socket.join(roomId)
+      await socket.join(`problem:${slug}`)  // problem-level channel for rooms_updated broadcasts
 
       if (!rooms.has(roomId)) rooms.set(roomId, new Map())
       rooms.get(roomId)!.set(socket.id, { socketId: socket.id, user })
 
-      // Fetch last 50 messages newest-first, then reverse for chronological order
+      // Fetch last 50 messages for this sub-room
       const recent = await db
         .select({
           id: problemMessages.id,
@@ -124,7 +177,7 @@ export function createSocketServer(httpServer: HttpServer): Server {
         })
         .from(problemMessages)
         .leftJoin(users, eq(problemMessages.userId, users.id))
-        .where(eq(problemMessages.roomId, problemSlug.toLowerCase()))
+        .where(eq(problemMessages.roomId, roomId))
         .orderBy(desc(problemMessages.createdAt))
         .limit(50)
 
@@ -136,9 +189,12 @@ export function createSocketServer(httpServer: HttpServer): Server {
           createdAt: m.createdAt,
           author: { id: m.authorId, name: m.authorName, avatarUrl: m.authorAvatarUrl },
         })),
+        roomNumber: targetNumber,
+        rooms: getProblemSubRooms(slug),
       })
 
       socket.to(roomId).emit('user_joined', { id: user.id, name: user.name, avatarUrl: user.avatarUrl })
+      io.to(`problem:${slug}`).emit('rooms_updated', getProblemSubRooms(slug))
     })
 
     // ── send_message ───────────────────────────────────────────────────────────
@@ -147,10 +203,9 @@ export function createSocketServer(httpServer: HttpServer): Server {
       const trimmed = content.trim().slice(0, 500)
       if (!trimmed) return
 
-      const slug = currentRoomId.replace('problem:', '')
       const [msg] = await db
         .insert(problemMessages)
-        .values({ roomId: slug, userId: user.id, content: trimmed })
+        .values({ roomId: currentRoomId, userId: user.id, content: trimmed })
         .returning()
 
       if (!msg) return
@@ -164,9 +219,10 @@ export function createSocketServer(httpServer: HttpServer): Server {
 
     // ── disconnect ─────────────────────────────────────────────────────────────
     socket.on('disconnect', () => {
-      if (currentRoomId) {
+      if (currentRoomId && currentSlug) {
         const { userGone, userId } = removeSocket(socket.id, currentRoomId)
         if (userGone) socket.to(currentRoomId).emit('user_left', { id: userId })
+        io.to(`problem:${currentSlug}`).emit('rooms_updated', getProblemSubRooms(currentSlug))
       }
     })
   })

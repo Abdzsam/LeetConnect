@@ -23,6 +23,12 @@ export interface RoomMessage {
   }
 }
 
+export interface SubRoomInfo {
+  number: number
+  userCount: number
+  capacity: number
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getProblemSlug(pathname: string): string | null {
@@ -44,6 +50,8 @@ export function useProblemRoom() {
   const [roomUsers, setRoomUsers] = useState<RoomUser[]>([])
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [connected, setConnected] = useState(false)
+  const [currentRoomNumber, setCurrentRoomNumber] = useState<number | null>(null)
+  const [availableRooms, setAvailableRooms] = useState<SubRoomInfo[]>([])
   const [problemSlug, setProblemSlug] = useState<string | null>(() =>
     getProblemSlug(window.location.pathname),
   )
@@ -51,13 +59,15 @@ export function useProblemRoom() {
   const socketRef = useRef<Socket | null>(null)
   const slugRef = useRef(problemSlug)
 
-  // Detect LeetCode SPA navigations (pushState / popstate)
+  // Detect LeetCode SPA navigations
   useEffect(() => {
     const check = () => {
       const newSlug = getProblemSlug(window.location.pathname)
       if (newSlug !== slugRef.current) {
         slugRef.current = newSlug
         setProblemSlug(newSlug)
+        setCurrentRoomNumber(null)
+        setAvailableRooms([])
         if (newSlug && socketRef.current?.connected) {
           socketRef.current.emit('join_room', { problemSlug: newSlug })
         }
@@ -95,9 +105,20 @@ export function useProblemRoom() {
 
       socket.on('disconnect', () => setConnected(false))
 
-      socket.on('room_state', (data: { users: RoomUser[]; messages: RoomMessage[] }) => {
+      socket.on('room_state', (data: {
+        users: RoomUser[]
+        messages: RoomMessage[]
+        roomNumber: number
+        rooms: SubRoomInfo[]
+      }) => {
         setRoomUsers(data.users)
         setMessages(data.messages)
+        setCurrentRoomNumber(data.roomNumber)
+        setAvailableRooms(data.rooms)
+      })
+
+      socket.on('rooms_updated', (rooms: SubRoomInfo[]) => {
+        setAvailableRooms(rooms)
       })
 
       socket.on('user_joined', (user: RoomUser) => {
@@ -111,6 +132,19 @@ export function useProblemRoom() {
       socket.on('new_message', (msg: RoomMessage) => {
         setMessages((prev) => [...prev, msg])
       })
+
+      // room_full: auto-bump to next available room
+      socket.on('room_full', ({ roomNumber }: { roomNumber: number }) => {
+        const slug = slugRef.current
+        if (!slug) return
+        setAvailableRooms((prev) => {
+          const next = prev.find((r) => r.number !== roomNumber && r.userCount < r.capacity)
+          if (next) {
+            socket.emit('join_room', { problemSlug: slug, roomNumber: next.number })
+          }
+          return prev
+        })
+      })
     }
 
     void connect()
@@ -121,6 +155,8 @@ export function useProblemRoom() {
       setConnected(false)
       setRoomUsers([])
       setMessages([])
+      setCurrentRoomNumber(null)
+      setAvailableRooms([])
     }
   }, [])
 
@@ -128,5 +164,11 @@ export function useProblemRoom() {
     socketRef.current?.emit('send_message', { content })
   }, [])
 
-  return { roomUsers, messages, connected, problemSlug, sendMessage }
+  const joinRoom = useCallback((roomNumber: number) => {
+    const slug = slugRef.current
+    if (!slug || !socketRef.current?.connected) return
+    socketRef.current.emit('join_room', { problemSlug: slug, roomNumber })
+  }, [])
+
+  return { roomUsers, messages, connected, problemSlug, currentRoomNumber, availableRooms, sendMessage, joinRoom }
 }
