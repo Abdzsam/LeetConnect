@@ -1,12 +1,18 @@
 /**
  * MV3 Service Worker — LeetConnect background script.
  *
+ * OAuth flow:
+ *   1. Get chromiumapp.org redirect URI via chrome.identity.getRedirectURL()
+ *   2. Fetch a signed auth URL from the server (server stores PKCE state)
+ *   3. Call chrome.identity.launchWebAuthFlow — Google redirects back to chromiumapp.org
+ *   4. Extract code + state from the returned URL
+ *   5. POST code + state to server /auth/google/exchange → receive JWT + refresh token
+ *
  * Security:
  *   - All chrome.runtime.onMessage listeners validate the sender's extension ID.
  *   - External messages (onMessageExternal) are rejected by default.
  *   - No eval(), no Function(), no dynamic code execution.
  *   - Storage writes validate format before persisting.
- *   - OAuth redirect URL validated to chromiumapp.org before use.
  */
 
 const API_BASE = 'http://localhost:3000'
@@ -113,7 +119,6 @@ function handleMessage(
         sendResponse({ ok: false, error: 'Invalid refresh token format' })
         break
       }
-      // Decode JWT payload to extract userId (sub claim)
       let userId: string | null = null
       try {
         const payloadB64 = accessToken.split('.')[1]
@@ -137,22 +142,22 @@ function handleMessage(
     }
 
     case 'INITIATE_GOOGLE_AUTH': {
-      initiateGoogleAuth(sendResponse)
+      void initiateGoogleAuth(sendResponse)
       break
     }
 
     case 'REFRESH_TOKEN': {
-      refreshAccessToken(sendResponse)
+      void refreshAccessToken(sendResponse)
       break
     }
 
     case 'GET_USER': {
-      getUserProfile(sendResponse)
+      void getUserProfile(sendResponse)
       break
     }
 
     case 'LOGOUT': {
-      logoutUser(sendResponse)
+      void logoutUser(sendResponse)
       break
     }
 
@@ -167,64 +172,85 @@ function handleMessage(
 // ─── Auth handlers ────────────────────────────────────────────────────────────
 
 async function initiateGoogleAuth(sendResponse: (r: MessageResponse) => void): Promise<void> {
-  // Keep the service worker alive while the user completes the Google sign-in.
-  // MV3 service workers can be terminated after ~30s of inactivity; the user
-  // may take longer than that to pick their account.
+  // Keep the service worker alive — MV3 workers can be killed after ~30s of inactivity
+  // and the user may take longer than that to pick their Google account.
   const KEEPALIVE_ALARM = 'lc-auth-keepalive'
   chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.4 })
-  chrome.alarms.onAlarm.addListener(function keepAlive(alarm) {
-    if (alarm.name === KEEPALIVE_ALARM) {
-      // Re-registering keeps the service worker from sleeping
-    } else {
-      chrome.alarms.onAlarm.removeListener(keepAlive)
-    }
-  })
 
   try {
-    // Get the extension's OAuth redirect URL (e.g. https://[id].chromiumapp.org/)
-    const redirectUri = chrome.identity.getRedirectURL()
+    // The chromiumapp.org URL is what Google will redirect back to.
+    // It must be registered as an Authorized Redirect URI in Google Cloud Console.
+    const extRedirectUri = chrome.identity.getRedirectURL()
 
-    const authUrl = new URL(`${API_BASE}/auth/google`)
-    authUrl.searchParams.set('redirect_uri', redirectUri)
+    // Ask the server to build the Google auth URL (PKCE state lives on the server)
+    const initRes = await fetch(
+      `${API_BASE}/auth/google/init?ext_redirect_uri=${encodeURIComponent(extRedirectUri)}`,
+    )
+    if (!initRes.ok) {
+      const err = (await initRes.json()) as { error?: string }
+      sendResponse({ ok: false, error: err.error ?? 'Failed to init auth' })
+      return
+    }
+    const { authUrl } = (await initRes.json()) as { authUrl: string }
 
-    // Open the OAuth popup — resolves with the final redirect URL
-    const resultUrl = await chrome.identity.launchWebAuthFlow({
-      url: authUrl.toString(),
-      interactive: true,
-    })
+    // Open the Google consent page — launchWebAuthFlow intercepts the chromiumapp.org redirect
+    const resultUrl = await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true })
 
     if (!resultUrl) {
       sendResponse({ ok: false, error: 'Auth flow cancelled or failed' })
       return
     }
 
-    // Extract tokens from the result URL query params
-    const url = new URL(resultUrl)
-    const accessToken = url.searchParams.get('access_token')
-    const refreshToken = url.searchParams.get('refresh_token')
+    // Extract code and state that Google appended to the chromiumapp.org URL
+    const result = new URL(resultUrl)
+    const code = result.searchParams.get('code')
+    const state = result.searchParams.get('state')
 
-    if (!accessToken || !refreshToken) {
-      sendResponse({ ok: false, error: 'No tokens returned from auth flow' })
+    if (!code || !state) {
+      sendResponse({ ok: false, error: 'Missing code or state in OAuth response' })
       return
     }
-    if (!JWT_PATTERN.test(accessToken)) {
+
+    // Hand the code to the server — it verifies PKCE and issues our JWT + refresh token
+    const exchangeRes = await fetch(`${API_BASE}/auth/google/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, state }),
+    })
+
+    if (!exchangeRes.ok) {
+      const err = (await exchangeRes.json()) as { error?: string }
+      sendResponse({ ok: false, error: err.error ?? 'Token exchange failed' })
+      return
+    }
+
+    const tokens = (await exchangeRes.json()) as {
+      access_token: string
+      refresh_token: string
+    }
+
+    if (!JWT_PATTERN.test(tokens.access_token)) {
       sendResponse({ ok: false, error: 'Malformed access token received' })
       return
     }
 
-    // Decode JWT payload to extract sub (userId)
     let userId: string | null = null
     try {
-      const payloadB64 = accessToken.split('.')[1]
+      const payloadB64 = tokens.access_token.split('.')[1]
       const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>
       if (typeof payload['sub'] === 'string') userId = payload['sub']
     } catch { /* leave null */ }
 
-    await chrome.storage.local.set({ accessToken, refreshToken, userId })
+    await chrome.storage.local.set({
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      userId,
+    })
+
     sendResponse({ ok: true, data: { userId } })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    sendResponse({ ok: false, error: message })
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    sendResponse({ ok: false, error: msg })
   } finally {
     chrome.alarms.clear(KEEPALIVE_ALARM)
   }
@@ -288,13 +314,11 @@ async function getUserProfile(sendResponse: (r: MessageResponse) => void): Promi
     })
 
     if (res.status === 401) {
-      // Try refreshing
-      const refreshRes = await new Promise<MessageResponse>((resolve) => refreshAccessToken(resolve))
+      const refreshRes = await new Promise<MessageResponse>((resolve) => void refreshAccessToken(resolve))
       if (!refreshRes.ok) {
         sendResponse({ ok: false, error: 'Session expired. Please sign in again.' })
         return
       }
-      // Retry with new token
       const newToken = ((refreshRes.data) as { accessToken: string }).accessToken
       const retryRes = await fetch(`${API_BASE}/auth/me`, {
         headers: { Authorization: `Bearer ${newToken}` },
@@ -328,7 +352,6 @@ async function logoutUser(sendResponse: (r: MessageResponse) => void): Promise<v
       'refreshToken',
     ])
 
-    // Best-effort server-side logout (don't fail if the request errors)
     if (accessToken && typeof accessToken === 'string') {
       const body: Record<string, string> = {}
       if (refreshToken && typeof refreshToken === 'string') {

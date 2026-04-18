@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { randomBytes } from 'node:crypto'
-import { generateCodeVerifier, generateState } from 'arctic'
+import { generateCodeVerifier, generateState, Google } from 'arctic'
 import { google } from '../lib/google-oauth.js'
+import { config } from '../config.js'
 import {
   signAccessToken,
   generateRefreshToken,
@@ -52,7 +53,7 @@ export function buildTokenRedirect(
 
 interface OAuthSession {
   codeVerifier: string
-  redirectUri: string
+  redirectUri: string   // chromiumapp.org URI (for /init flow) or server callback URI (for /google flow)
   expiresAt: number
 }
 
@@ -230,6 +231,155 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
         refreshToken,
       )
       reply.redirect(finalRedirect)
+    },
+  )
+
+  // ── GET /auth/google/init ────────────────────────────────────────────────────
+  // Called by the extension before launchWebAuthFlow. Returns the Google auth URL
+  // (with PKCE) so the extension can pass it to chrome.identity.launchWebAuthFlow.
+  // The redirect_uri used here is the chromiumapp.org URL supplied by the extension,
+  // which must be registered in Google Cloud Console.
+  fastify.get(
+    '/auth/google/init',
+    async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const query = request.query as Record<string, string | undefined>
+      const extRedirectUri = query['ext_redirect_uri']
+
+      if (!extRedirectUri || !isValidExtensionRedirectUri(extRedirectUri)) {
+        reply.code(400).send({ ok: false, error: 'Invalid or missing ext_redirect_uri' })
+        return
+      }
+
+      const state = generateState()
+      const codeVerifier = generateCodeVerifier()
+
+      oauthStateStore.set(state, {
+        codeVerifier,
+        redirectUri: extRedirectUri,
+        expiresAt: Date.now() + 10 * 60 * 1000,
+      })
+
+      // Build the auth URL with the chromiumapp.org URI as the redirect target
+      const dynamicGoogle = new Google(
+        config.googleClientId,
+        config.googleClientSecret,
+        extRedirectUri,
+      )
+      const authUrl = dynamicGoogle.createAuthorizationURL(state, codeVerifier, [
+        'openid',
+        'email',
+        'profile',
+      ])
+
+      reply.code(200).send({ ok: true, authUrl: authUrl.toString() })
+    },
+  )
+
+  // ── POST /auth/google/exchange ───────────────────────────────────────────────
+  // Called by the extension after launchWebAuthFlow returns the code.
+  // Verifies PKCE, fetches Google user info, upserts the user, and returns tokens.
+  fastify.post(
+    '/auth/google/exchange',
+    async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const body = request.body as Record<string, unknown> | null | undefined
+      const code = body?.['code']
+      const state = body?.['state']
+
+      if (typeof code !== 'string' || !code || typeof state !== 'string' || !state) {
+        reply.code(400).send({ ok: false, error: 'Missing code or state' })
+        return
+      }
+
+      const session = oauthStateStore.get(state)
+      oauthStateStore.delete(state)
+
+      if (!session || session.expiresAt < Date.now()) {
+        reply.code(400).send({ ok: false, error: 'Invalid or expired state' })
+        return
+      }
+
+      // Exchange the code using the same redirect_uri that was used in the auth URL
+      let googleTokens
+      try {
+        const dynamicGoogle = new Google(
+          config.googleClientId,
+          config.googleClientSecret,
+          session.redirectUri,
+        )
+        googleTokens = await dynamicGoogle.validateAuthorizationCode(code, session.codeVerifier)
+      } catch (err) {
+        fastify.log.error({ err }, 'Google OAuth code exchange failed')
+        reply.code(400).send({ ok: false, error: 'Failed to exchange authorization code' })
+        return
+      }
+
+      let userInfo: GoogleUserInfo
+      try {
+        const googleAccessToken = googleTokens.accessToken()
+        const userinfoRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+          headers: { Authorization: `Bearer ${googleAccessToken}` },
+        })
+        if (!userinfoRes.ok) throw new Error(`Google userinfo returned ${userinfoRes.status}`)
+        userInfo = (await userinfoRes.json()) as GoogleUserInfo
+        if (!userInfo.sub || !userInfo.email || !userInfo.name) {
+          throw new Error('Incomplete user info from Google')
+        }
+      } catch (err) {
+        fastify.log.error({ err }, 'Failed to fetch Google user info')
+        reply.code(502).send({ ok: false, error: 'Failed to fetch user info from Google' })
+        return
+      }
+
+      let userId: string
+      try {
+        const [upserted] = await db
+          .insert(users)
+          .values({
+            googleId: userInfo.sub,
+            email: userInfo.email,
+            name: userInfo.name,
+            avatarUrl: userInfo.picture ?? null,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: users.googleId,
+            set: {
+              email: userInfo.email,
+              name: userInfo.name,
+              avatarUrl: userInfo.picture ?? null,
+              updatedAt: new Date(),
+            },
+          })
+          .returning({ id: users.id })
+
+        if (!upserted) throw new Error('Upsert returned no rows')
+        userId = upserted.id
+      } catch (err) {
+        fastify.log.error({ err }, 'Failed to upsert user')
+        reply.code(500).send({ ok: false, error: 'Database error' })
+        return
+      }
+
+      const accessToken = await signAccessToken(userId)
+      const refreshToken = generateRefreshToken()
+      const tokenHash = hashToken(refreshToken)
+      const expiresAt = new Date()
+      expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_TTL_DAYS)
+
+      try {
+        await db.insert(refreshTokens).values({ userId, tokenHash, expiresAt })
+      } catch (err) {
+        fastify.log.error({ err }, 'Failed to store refresh token')
+        reply.code(500).send({ ok: false, error: 'Database error' })
+        return
+      }
+
+      reply.code(200).send({
+        ok: true,
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: 900,
+      })
     },
   )
 
