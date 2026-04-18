@@ -18,18 +18,23 @@ if ! railway status &>/dev/null; then
   railway init --name leetconnect-server
 fi
 
-# Push all env vars from .env to Railway (skip deploys, we'll deploy once at the end)
-echo "  Setting environment variables..."
+# Step 1: Create the service by deploying (service named "server" is created on first up)
+echo "  Creating service and uploading code..."
+railway up --detach --service server
+echo "  Waiting for service to register..."
+sleep 8
+
+# Step 2: Set env vars — Railway will auto-redeploy the service
+echo "  Setting environment variables (will trigger redeploy)..."
 while IFS='=' read -r key value; do
   [[ -z "$key" || "$key" == \#* ]] && continue
   railway variable --service server set "$key=$value" --skip-deploys 2>/dev/null || true
 done < .env
-railway variable --service server set NODE_ENV=production --skip-deploys
+# Final var without --skip-deploys so Railway triggers a redeploy with all vars set
+railway variable --service server set NODE_ENV=production
 
-# Deploy (--service server creates the service if it doesn't exist yet)
-railway up --detach --service server
-echo "  Waiting for deployment to start..."
-sleep 15
+echo "  Waiting for redeploy to start..."
+sleep 20
 
 # Generate a domain if none exists, then grab it
 railway domain --service server 2>/dev/null || true
