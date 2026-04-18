@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 
-const SERVER_URL = 'http://localhost:3000'
+declare const __SERVER_URL__: string
+const SERVER_URL = __SERVER_URL__
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

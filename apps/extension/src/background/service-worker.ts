@@ -15,7 +15,8 @@
  *   - Storage writes validate format before persisting.
  */
 
-const API_BASE = 'http://localhost:3000'
+declare const __SERVER_URL__: string
+const API_BASE = __SERVER_URL__
 const JWT_PATTERN = /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/
 
 // ─── Types ────────────────────────────────────────────────────────────────────

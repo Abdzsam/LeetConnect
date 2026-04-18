@@ -1,5 +1,8 @@
 import { defineManifest } from '@crxjs/vite-plugin'
 
+const serverUrl = process.env['VITE_SERVER_URL'] ?? 'http://localhost:3000'
+const serverOrigin = new URL(serverUrl).origin
+
 export default defineManifest({
   manifest_version: 3,
   name: 'LeetConnect',
@@ -41,7 +44,7 @@ export default defineManifest({
 
   permissions: ['storage', 'activeTab', 'identity', 'alarms', 'webNavigation'],
 
-  host_permissions: ['http://localhost:3000/*'],
+  host_permissions: [`${serverOrigin}/*`],
 
   web_accessible_resources: [
     {
