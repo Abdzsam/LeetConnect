@@ -339,7 +339,7 @@ async function logoutUser(sendResponse: (r: MessageResponse) => void): Promise<v
 
 // ─── Type guard ───────────────────────────────────────────────────────────────
 
-function isInternalMessage(value: unknown): value is InternalMessage {
+export function isInternalMessage(value: unknown): value is InternalMessage {
   if (typeof value !== 'object' || value === null) return false
   const obj = value as Record<string, unknown>
   const validTypes = new Set<string>([

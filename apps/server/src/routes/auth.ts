@@ -15,7 +15,7 @@ import { eq, and } from 'drizzle-orm'
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Validate that the redirect_uri is a chromiumapp.org or chrome-extension:// URL. */
-function isValidExtensionRedirectUri(uri: string): boolean {
+export function isValidExtensionRedirectUri(uri: string): boolean {
   try {
     const url = new URL(uri)
     // Accept https://<id>.chromiumapp.org/ URIs
@@ -33,7 +33,7 @@ function isValidExtensionRedirectUri(uri: string): boolean {
 }
 
 /** Build redirect URL with token params appended. */
-function buildTokenRedirect(
+export function buildTokenRedirect(
   redirectUri: string,
   accessToken: string,
   refreshToken: string,
