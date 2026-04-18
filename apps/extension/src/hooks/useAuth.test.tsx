@@ -1,8 +1,23 @@
 // The chrome global is stubbed in src/test-setup.ts.
 // Here we just grab the mock fn reference to control it per-test.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { renderHook, act } from '@testing-library/react'
 import { useAuth, type AuthUser } from './useAuth.js'
+
+async function waitFor(assertion: () => void, timeoutMs = 2000): Promise<void> {
+  const started = Date.now()
+
+  while (Date.now() - started < timeoutMs) {
+    try {
+      assertion()
+      return
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  }
+
+  assertion()
+}
 
 // ─── Mock chrome.runtime.sendMessage ─────────────────────────────────────────
 
@@ -165,7 +180,7 @@ describe('useAuth — signIn', () => {
     await act(async () => { await result.current.signIn() })
 
     const initiateCall = mockSendMessage.mock.calls.find(
-      (args) => (args as [{ type: string }])[0]?.type === 'INITIATE_GOOGLE_AUTH',
+      (args) => (args[0] as { type?: string } | undefined)?.type === 'INITIATE_GOOGLE_AUTH',
     )
     expect(initiateCall).toBeDefined()
   })
@@ -240,7 +255,7 @@ describe('useAuth — signOut', () => {
     await act(async () => { await result.current.signOut() })
 
     const logoutCall = mockSendMessage.mock.calls.find(
-      (args) => (args as [{ type: string }])[0]?.type === 'LOGOUT',
+      (args) => (args[0] as { type?: string } | undefined)?.type === 'LOGOUT',
     )
     expect(logoutCall).toBeDefined()
   })

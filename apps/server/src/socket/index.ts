@@ -7,8 +7,6 @@ import { eq, desc } from 'drizzle-orm'
 
 const ROOM_CAPACITY = 15
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface SocketUser {
   id: string
   name: string
@@ -20,21 +18,24 @@ interface RoomPresence {
   user: SocketUser
 }
 
+interface VoiceParticipant {
+  socketId: string
+  user: SocketUser
+}
+
 export interface SubRoomInfo {
   number: number
   userCount: number
   capacity: number
 }
 
-// ─── In-memory presence store: roomId → (socketId → presence) ────────────────
-
 const rooms = new Map<string, Map<string, RoomPresence>>()
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const voiceRooms = new Map<string, Map<string, VoiceParticipant>>()
 
 function getRoomUsers(roomId: string): SocketUser[] {
   const room = rooms.get(roomId)
   if (!room) return []
+
   const seen = new Set<string>()
   const out: SocketUser[] = []
   for (const { user } of room.values()) {
@@ -49,39 +50,70 @@ function getRoomUsers(roomId: string): SocketUser[] {
 function removeSocket(socketId: string, roomId: string): { userGone: boolean; userId: string } {
   const room = rooms.get(roomId)
   if (!room) return { userGone: true, userId: '' }
+
   const presence = room.get(socketId)
   const userId = presence?.user.id ?? ''
   room.delete(socketId)
   if (room.size === 0) rooms.delete(roomId)
+
   const userStillPresent = [...(rooms.get(roomId)?.values() ?? [])].some((p) => p.user.id === userId)
   return { userGone: !userStillPresent, userId }
 }
 
-function subRoomId(slug: string, n: number): string {
+function getVoiceParticipants(roomId: string): VoiceParticipant[] {
+  return [...(voiceRooms.get(roomId)?.values() ?? [])]
+}
+
+function isVoiceParticipant(roomId: string, socketId: string): boolean {
+  return voiceRooms.get(roomId)?.has(socketId) ?? false
+}
+
+function removeVoiceSocket(socketId: string, roomId: string): boolean {
+  const room = voiceRooms.get(roomId)
+  if (!room) return false
+
+  const existed = room.delete(socketId)
+  if (room.size === 0) voiceRooms.delete(roomId)
+  return existed
+}
+
+export function subRoomId(slug: string, n: number): string {
   return `problem:${slug}:${n}`
 }
 
-function getProblemSubRooms(slug: string): SubRoomInfo[] {
+export function summarizeProblemSubRooms(
+  roomEntries: Array<{ roomId: string; userCount: number }>,
+  slug: string,
+  capacity = ROOM_CAPACITY,
+): SubRoomInfo[] {
   const prefix = `problem:${slug}:`
   const result: SubRoomInfo[] = []
-  for (const [roomId] of rooms.entries()) {
+  for (const { roomId, userCount } of roomEntries) {
     if (roomId.startsWith(prefix)) {
       const number = parseInt(roomId.split(':')[2] ?? '0', 10)
-      result.push({ number, userCount: getRoomUsers(roomId).length, capacity: ROOM_CAPACITY })
+      result.push({ number, userCount, capacity })
     }
   }
   return result.sort((a, b) => a.number - b.number)
 }
 
-function autoAssignRoom(slug: string): number {
-  const subRooms = getProblemSubRooms(slug)
+export function pickAutoRoom(subRooms: SubRoomInfo[]): number {
   for (const { number, userCount } of subRooms) {
     if (userCount < ROOM_CAPACITY) return number
   }
   return (subRooms[subRooms.length - 1]?.number ?? 0) + 1
 }
 
-// ─── Socket.io server factory ─────────────────────────────────────────────────
+function getProblemSubRooms(slug: string): SubRoomInfo[] {
+  return summarizeProblemSubRooms(
+    [...rooms.entries()].map(([roomId]) => ({ roomId, userCount: getRoomUsers(roomId).length })),
+    slug,
+  )
+}
+
+function autoAssignRoom(slug: string): number {
+  return pickAutoRoom(getProblemSubRooms(slug))
+}
 
 export function createSocketServer(httpServer: HttpServer): Server {
   const io = new Server(httpServer, {
@@ -102,18 +134,26 @@ export function createSocketServer(httpServer: HttpServer): Server {
     },
   })
 
-  // ── JWT auth middleware ──────────────────────────────────────────────────────
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth['token']
-      if (typeof token !== 'string') { next(new Error('No token')); return }
+      if (typeof token !== 'string') {
+        next(new Error('No token'))
+        return
+      }
+
       const payload = await verifyAccessToken(token)
       const [user] = await db
         .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
         .from(users)
         .where(eq(users.id, payload.sub))
         .limit(1)
-      if (!user) { next(new Error('User not found')); return }
+
+      if (!user) {
+        next(new Error('User not found'))
+        return
+      }
+
       socket.data['user'] = user
       next()
     } catch {
@@ -121,32 +161,38 @@ export function createSocketServer(httpServer: HttpServer): Server {
     }
   })
 
-  // ── Connection handler ───────────────────────────────────────────────────────
   io.on('connection', (socket) => {
     const user = socket.data['user'] as SocketUser
-    let currentRoomId: string | null = null   // e.g. "problem:two-sum:1"
-    let currentSlug: string | null = null     // e.g. "two-sum"
+    let currentRoomId: string | null = null
+    let currentSlug: string | null = null
 
-    // ── join_room ──────────────────────────────────────────────────────────────
+    const leaveVoiceRoom = (): void => {
+      if (!currentRoomId) return
+
+      const removed = removeVoiceSocket(socket.id, currentRoomId)
+      if (removed) {
+        socket.to(currentRoomId).emit('voice_user_left', { socketId: socket.id, userId: user.id })
+      }
+    }
+
     socket.on('join_room', async ({ problemSlug, roomNumber }: { problemSlug?: unknown; roomNumber?: unknown }) => {
       if (typeof problemSlug !== 'string' || !/^[a-z0-9-]+$/i.test(problemSlug)) return
       const slug = problemSlug.toLowerCase()
 
-      // Leave previous sub-room
       if (currentRoomId && currentSlug) {
+        leaveVoiceRoom()
         const { userGone, userId } = removeSocket(socket.id, currentRoomId)
         if (userGone) socket.to(currentRoomId).emit('user_left', { id: userId })
         socket.leave(currentRoomId)
+        socket.leave(`problem:${currentSlug}`)
         io.to(`problem:${currentSlug}`).emit('rooms_updated', getProblemSubRooms(currentSlug))
       }
 
-      // Determine target room number
       const targetNumber =
         typeof roomNumber === 'number' && Number.isInteger(roomNumber) && roomNumber >= 1
           ? roomNumber
           : autoAssignRoom(slug)
 
-      // Reject manual join if room is full
       if (typeof roomNumber === 'number') {
         const count = getRoomUsers(subRoomId(slug, targetNumber)).length
         if (count >= ROOM_CAPACITY) {
@@ -160,12 +206,11 @@ export function createSocketServer(httpServer: HttpServer): Server {
       currentSlug = slug
 
       await socket.join(roomId)
-      await socket.join(`problem:${slug}`)  // problem-level channel for rooms_updated broadcasts
+      await socket.join(`problem:${slug}`)
 
       if (!rooms.has(roomId)) rooms.set(roomId, new Map())
       rooms.get(roomId)!.set(socket.id, { socketId: socket.id, user })
 
-      // Fetch last 50 messages for this sub-room
       const recent = await db
         .select({
           id: problemMessages.id,
@@ -191,15 +236,16 @@ export function createSocketServer(httpServer: HttpServer): Server {
         })),
         roomNumber: targetNumber,
         rooms: getProblemSubRooms(slug),
+        voiceUsers: getVoiceParticipants(roomId),
       })
 
       socket.to(roomId).emit('user_joined', { id: user.id, name: user.name, avatarUrl: user.avatarUrl })
       io.to(`problem:${slug}`).emit('rooms_updated', getProblemSubRooms(slug))
     })
 
-    // ── send_message ───────────────────────────────────────────────────────────
     socket.on('send_message', async ({ content }: { content?: unknown }) => {
       if (!currentRoomId || typeof content !== 'string') return
+
       const trimmed = content.trim().slice(0, 500)
       if (!trimmed) return
 
@@ -209,6 +255,7 @@ export function createSocketServer(httpServer: HttpServer): Server {
         .returning()
 
       if (!msg) return
+
       io.to(currentRoomId).emit('new_message', {
         id: msg.id,
         content: msg.content,
@@ -217,9 +264,92 @@ export function createSocketServer(httpServer: HttpServer): Server {
       })
     })
 
-    // ── disconnect ─────────────────────────────────────────────────────────────
+    socket.on('join_voice', () => {
+      if (!currentRoomId) return
+
+      if (!voiceRooms.has(currentRoomId)) voiceRooms.set(currentRoomId, new Map())
+      const room = voiceRooms.get(currentRoomId)!
+      room.set(socket.id, { socketId: socket.id, user })
+
+      socket.emit('voice_state', {
+        users: getVoiceParticipants(currentRoomId),
+        peers: [...room.keys()].filter((peerSocketId) => peerSocketId !== socket.id),
+      })
+
+      socket.to(currentRoomId).emit('voice_user_joined', { socketId: socket.id, user })
+    })
+
+    socket.on('leave_voice', () => {
+      leaveVoiceRoom()
+    })
+
+    socket.on(
+      'voice_offer',
+      ({ targetSocketId, description }: { targetSocketId?: unknown; description?: unknown }) => {
+        if (
+          !currentRoomId ||
+          typeof targetSocketId !== 'string' ||
+          typeof description !== 'object' ||
+          description === null ||
+          !isVoiceParticipant(currentRoomId, socket.id) ||
+          !isVoiceParticipant(currentRoomId, targetSocketId)
+        ) {
+          return
+        }
+
+        io.to(targetSocketId).emit('voice_offer', {
+          fromSocketId: socket.id,
+          description,
+          user,
+        })
+      },
+    )
+
+    socket.on(
+      'voice_answer',
+      ({ targetSocketId, description }: { targetSocketId?: unknown; description?: unknown }) => {
+        if (
+          !currentRoomId ||
+          typeof targetSocketId !== 'string' ||
+          typeof description !== 'object' ||
+          description === null ||
+          !isVoiceParticipant(currentRoomId, socket.id) ||
+          !isVoiceParticipant(currentRoomId, targetSocketId)
+        ) {
+          return
+        }
+
+        io.to(targetSocketId).emit('voice_answer', {
+          fromSocketId: socket.id,
+          description,
+        })
+      },
+    )
+
+    socket.on(
+      'voice_ice_candidate',
+      ({ targetSocketId, candidate }: { targetSocketId?: unknown; candidate?: unknown }) => {
+        if (
+          !currentRoomId ||
+          typeof targetSocketId !== 'string' ||
+          typeof candidate !== 'object' ||
+          candidate === null ||
+          !isVoiceParticipant(currentRoomId, socket.id) ||
+          !isVoiceParticipant(currentRoomId, targetSocketId)
+        ) {
+          return
+        }
+
+        io.to(targetSocketId).emit('voice_ice_candidate', {
+          fromSocketId: socket.id,
+          candidate,
+        })
+      },
+    )
+
     socket.on('disconnect', () => {
       if (currentRoomId && currentSlug) {
+        leaveVoiceRoom()
         const { userGone, userId } = removeSocket(socket.id, currentRoomId)
         if (userGone) socket.to(currentRoomId).emit('user_left', { id: userId })
         io.to(`problem:${currentSlug}`).emit('rooms_updated', getProblemSubRooms(currentSlug))
