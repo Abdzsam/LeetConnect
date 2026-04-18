@@ -1,3 +1,6 @@
+import { webcrypto } from 'node:crypto'
+if (!globalThis.crypto) (globalThis as any).crypto = webcrypto
+
 import Fastify from 'fastify'
 import cookie from '@fastify/cookie'
 import { config } from './config.js'
