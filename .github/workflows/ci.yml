@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/**, fix/**, chore/**]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Server ──────────────────────────────────────────────────────────────────
+  server:
+    name: Server — typecheck + test + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  # ── Extension ───────────────────────────────────────────────────────────────
+  extension:
+    name: Extension — typecheck + test + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/extension
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-dist-${{ github.sha }}
+          path: apps/extension/dist/
+          retention-days: 7

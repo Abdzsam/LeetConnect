@@ -1,0 +1,90 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: cd-main
+  cancel-in-progress: false   # never cancel a deployment in progress
+
+jobs:
+  # ── Build & archive the extension ───────────────────────────────────────────
+  release-extension:
+    name: Build extension release artifact
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/extension
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Zip extension dist
+        run: |
+          cd dist
+          zip -r ../leetconnect-extension.zip .
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: leetconnect-extension-${{ github.sha }}
+          path: apps/extension/leetconnect-extension.zip
+          retention-days: 30
+
+  # ── Deploy server ────────────────────────────────────────────────────────────
+  deploy-server:
+    name: Deploy server
+    runs-on: ubuntu-latest
+    needs: [release-extension]   # only deploy after extension build succeeds
+    environment: production
+    defaults:
+      run:
+        working-directory: apps/server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # ── Uncomment and configure one of the deploy targets below ─────────────
+      #
+      # Railway:
+      #   - name: Deploy to Railway
+      #     uses: railwayapp/nixpacks-action@v1  (or use railway CLI)
+      #     env:
+      #       RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      #
+      # Fly.io:
+      #   - uses: superfly/flyctl-actions/setup-flyctl@master
+      #   - name: Deploy to Fly.io
+      #     run: flyctl deploy --remote-only
+      #     env:
+      #       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      #
+      # Render: set up auto-deploy from the Render dashboard (no action needed).
+      #
+      - name: Deploy placeholder
+        run: echo "Configure a deploy target above. Build artifact is ready at apps/server/dist/"
