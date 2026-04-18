@@ -39,6 +39,25 @@ export const refreshTokens = pgTable(
   }),
 )
 
+// ─── Problem Messages ─────────────────────────────────────────────────────────
+
+export const problemMessages = pgTable(
+  'problem_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    roomId: text('room_id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    roomIdIdx: index('problem_messages_room_id_idx').on(table.roomId),
+    createdAtIdx: index('problem_messages_created_at_idx').on(table.createdAt),
+  }),
+)
+
 // ─── Relations ────────────────────────────────────────────────────────────────
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -58,3 +77,5 @@ export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type RefreshToken = typeof refreshTokens.$inferSelect
 export type NewRefreshToken = typeof refreshTokens.$inferInsert
+export type ProblemMessage = typeof problemMessages.$inferSelect
+export type NewProblemMessage = typeof problemMessages.$inferInsert

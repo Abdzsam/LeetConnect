@@ -23,7 +23,8 @@
     "drizzle-orm": "^0.31.4",
     "fastify": "^5.0.0",
     "fastify-plugin": "^4.5.1",
-    "jose": "^5.4.1"
+    "jose": "^5.4.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",

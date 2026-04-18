@@ -41,6 +41,8 @@ export default defineManifest({
 
   permissions: ['storage', 'activeTab', 'identity', 'alarms', 'webNavigation'],
 
+  host_permissions: ['http://localhost:3000/*'],
+
   web_accessible_resources: [
     {
       resources: ['icons/*'],
