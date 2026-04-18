@@ -59,7 +59,9 @@ chrome.runtime.onMessage.addListener(
       sendResponse({ ok: false, error: 'Unauthorized sender' })
       return false
     }
-    if (sender.url && !sender.url.startsWith('chrome-extension://')) {
+    // sender.url is the injected page URL for content scripts — only block if the
+    // sender is an extension page (has a url) AND that url is not ours.
+    if (sender.url && !sender.url.startsWith('chrome-extension://') && !sender.tab) {
       sendResponse({ ok: false, error: 'Untrusted sender URL' })
       return false
     }
