@@ -172,17 +172,14 @@ function handleMessage(
 // ─── Auth handlers ────────────────────────────────────────────────────────────
 
 async function initiateGoogleAuth(sendResponse: (r: MessageResponse) => void): Promise<void> {
-  // Keep the service worker alive — MV3 workers can be killed after ~30s of inactivity
-  // and the user may take longer than that to pick their Google account.
+  // Keep the service worker alive — MV3 workers can be killed after ~30s of inactivity.
   const KEEPALIVE_ALARM = 'lc-auth-keepalive'
   chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.4 })
 
   try {
-    // The chromiumapp.org URL is what Google will redirect back to.
-    // It must be registered as an Authorized Redirect URI in Google Cloud Console.
+    // The chromiumapp.org URL must be registered as an Authorized Redirect URI in Google Cloud Console.
     const extRedirectUri = chrome.identity.getRedirectURL()
 
-    // Ask the server to build the Google auth URL (PKCE state lives on the server)
     const initRes = await fetch(
       `${API_BASE}/auth/google/init?ext_redirect_uri=${encodeURIComponent(extRedirectUri)}`,
     )
@@ -193,67 +190,107 @@ async function initiateGoogleAuth(sendResponse: (r: MessageResponse) => void): P
     }
     const { authUrl } = (await initRes.json()) as { authUrl: string }
 
-    // Open the Google consent page — launchWebAuthFlow intercepts the chromiumapp.org redirect
-    const resultUrl = await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true })
-
-    if (!resultUrl) {
-      sendResponse({ ok: false, error: 'Auth flow cancelled or failed' })
-      return
-    }
-
-    // Extract code and state that Google appended to the chromiumapp.org URL
-    const result = new URL(resultUrl)
-    const code = result.searchParams.get('code')
-    const state = result.searchParams.get('state')
-
-    if (!code || !state) {
-      sendResponse({ ok: false, error: 'Missing code or state in OAuth response' })
-      return
-    }
-
-    // Hand the code to the server — it verifies PKCE and issues our JWT + refresh token
-    const exchangeRes = await fetch(`${API_BASE}/auth/google/exchange`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, state }),
-    })
-
-    if (!exchangeRes.ok) {
-      const err = (await exchangeRes.json()) as { error?: string }
-      sendResponse({ ok: false, error: err.error ?? 'Token exchange failed' })
-      return
-    }
-
-    const tokens = (await exchangeRes.json()) as {
-      access_token: string
-      refresh_token: string
-    }
-
-    if (!JWT_PATTERN.test(tokens.access_token)) {
-      sendResponse({ ok: false, error: 'Malformed access token received' })
-      return
-    }
-
-    let userId: string | null = null
+    // Try the popup flow first (works when triggered from the extension popup page).
+    // Chrome silently returns null when launchWebAuthFlow is called without a user
+    // gesture in an extension page context — this happens when the trigger is a
+    // content script (the side panel).
+    let resultUrl: string | null = null
     try {
-      const payloadB64 = tokens.access_token.split('.')[1]
-      const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>
-      if (typeof payload['sub'] === 'string') userId = payload['sub']
-    } catch { /* leave null */ }
+      resultUrl = (await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true })) ?? null
+    } catch { /* falls through to tab-based flow */ }
 
-    await chrome.storage.local.set({
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      userId,
+    if (resultUrl) {
+      await exchangeAndStore(resultUrl, sendResponse)
+      return
+    }
+
+    // Tab-based fallback for content-script context: open the auth URL in a real tab.
+    // chrome.webNavigation intercepts when Google redirects back to chromiumapp.org.
+    // Signal the UI to poll rather than wait on this response.
+    sendResponse({ ok: true, data: { pending: true } })
+
+    const tab = await chrome.tabs.create({ url: authUrl })
+
+    await new Promise<void>((resolve) => {
+      const onNav = (details: chrome.webNavigation.WebNavigationParentedCallbackDetails) => {
+        if (details.tabId !== tab.id) return
+        try {
+          const redirected = new URL(details.url)
+          if (!redirected.hostname.endsWith('.chromiumapp.org')) return
+        } catch { return }
+
+        chrome.webNavigation.onBeforeNavigate.removeListener(onNav)
+        chrome.tabs.remove(details.tabId).catch(() => { /* tab may already be closing */ })
+
+        void (async () => {
+          // Exchange code silently — storage change will wake the polling UI.
+          const code = new URL(details.url).searchParams.get('code')
+          const state = new URL(details.url).searchParams.get('state')
+          if (code && state) {
+            await exchangeAndStore(details.url, () => { /* sendResponse already sent */ })
+          }
+          resolve()
+        })()
+      }
+
+      chrome.webNavigation.onBeforeNavigate.addListener(onNav)
+
+      // Safety timeout: 10 minutes, then clean up.
+      setTimeout(() => {
+        chrome.webNavigation.onBeforeNavigate.removeListener(onNav)
+        chrome.tabs.remove(tab.id ?? -1).catch(() => { /* ignore */ })
+        resolve()
+      }, 10 * 60 * 1000)
     })
-
-    sendResponse({ ok: true, data: { userId } })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
     sendResponse({ ok: false, error: msg })
   } finally {
     chrome.alarms.clear(KEEPALIVE_ALARM)
   }
+}
+
+async function exchangeAndStore(
+  resultUrl: string,
+  sendResponse: (r: MessageResponse) => void,
+): Promise<void> {
+  const url = new URL(resultUrl)
+  const code = url.searchParams.get('code')
+  const state = url.searchParams.get('state')
+
+  if (!code || !state) {
+    sendResponse({ ok: false, error: 'Missing code or state in OAuth response' })
+    return
+  }
+
+  const exchangeRes = await fetch(`${API_BASE}/auth/google/exchange`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, state }),
+  })
+
+  if (!exchangeRes.ok) {
+    const err = (await exchangeRes.json()) as { error?: string }
+    sendResponse({ ok: false, error: err.error ?? 'Token exchange failed' })
+    return
+  }
+
+  const tokens = (await exchangeRes.json()) as { access_token: string; refresh_token: string }
+
+  if (!JWT_PATTERN.test(tokens.access_token)) {
+    sendResponse({ ok: false, error: 'Malformed access token received' })
+    return
+  }
+
+  let userId: string | null = null
+  try {
+    const payloadB64 = tokens.access_token.split('.')[1]
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>
+    if (typeof payload['sub'] === 'string') userId = payload['sub']
+  } catch { /* leave null */ }
+
+  await chrome.storage.local.set({ accessToken: tokens.access_token, refreshToken: tokens.refresh_token, userId })
+  sendResponse({ ok: true, data: { userId } })
 }
 
 async function refreshAccessToken(sendResponse: (r: MessageResponse) => void): Promise<void> {
