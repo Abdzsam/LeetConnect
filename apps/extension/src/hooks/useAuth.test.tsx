@@ -165,7 +165,7 @@ describe('useAuth — signIn', () => {
     await act(async () => { await result.current.signIn() })
 
     const initiateCall = mockSendMessage.mock.calls.find(
-      ([msg]: [{ type: string }]) => msg.type === 'INITIATE_GOOGLE_AUTH',
+      (args) => (args as [{ type: string }])[0]?.type === 'INITIATE_GOOGLE_AUTH',
     )
     expect(initiateCall).toBeDefined()
   })
@@ -240,7 +240,7 @@ describe('useAuth — signOut', () => {
     await act(async () => { await result.current.signOut() })
 
     const logoutCall = mockSendMessage.mock.calls.find(
-      ([msg]: [{ type: string }]) => msg.type === 'LOGOUT',
+      (args) => (args as [{ type: string }])[0]?.type === 'LOGOUT',
     )
     expect(logoutCall).toBeDefined()
   })

@@ -30,9 +30,17 @@ export interface VoiceUser {
   user: RoomUser
 }
 
+export interface SubRoomInfo {
+  number: number
+  userCount: number
+  capacity: number
+}
+
 interface RoomStatePayload {
   users: RoomUser[]
   messages: RoomMessage[]
+  roomNumber: number
+  rooms: SubRoomInfo[]
   voiceUsers?: VoiceUser[]
 }
 
@@ -57,6 +65,8 @@ export function useProblemRoom() {
   const [roomUsers, setRoomUsers] = useState<RoomUser[]>([])
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [connected, setConnected] = useState(false)
+  const [currentRoomNumber, setCurrentRoomNumber] = useState<number | null>(null)
+  const [availableRooms, setAvailableRooms] = useState<SubRoomInfo[]>([])
   const [problemSlug, setProblemSlug] = useState<string | null>(() =>
     getProblemSlug(window.location.pathname),
   )
@@ -200,7 +210,7 @@ export function useProblemRoom() {
     }
 
     const socket = socketRef.current
-    if (!socket?.connected) {
+    if (!socket?.connected || currentRoomNumber === null) {
       setVoiceError('Connect to the room before joining voice.')
       return
     }
@@ -222,7 +232,7 @@ export function useProblemRoom() {
     } finally {
       setVoiceConnecting(false)
     }
-  }, [ensureLocalStream, problemSlug])
+  }, [currentRoomNumber, ensureLocalStream, problemSlug])
 
   const toggleMute = useCallback(() => {
     const nextMuted = !voiceMuted
@@ -241,6 +251,8 @@ export function useProblemRoom() {
         if (voiceJoinedRef.current) {
           leaveVoice()
         }
+        setCurrentRoomNumber(null)
+        setAvailableRooms([])
         if (newSlug && socketRef.current?.connected) {
           socketRef.current.emit('join_room', { problemSlug: newSlug })
         } else {
@@ -280,9 +292,6 @@ export function useProblemRoom() {
         if (slug) {
           socket.emit('join_room', { problemSlug: slug })
         }
-        if (voiceJoinedRef.current && slug) {
-          socket.emit('join_voice')
-        }
       })
 
       socket.on('disconnect', () => {
@@ -294,7 +303,17 @@ export function useProblemRoom() {
       socket.on('room_state', (data: RoomStatePayload) => {
         setRoomUsers(data.users)
         setMessages(data.messages)
+        setCurrentRoomNumber(data.roomNumber)
+        setAvailableRooms(data.rooms)
         setVoiceParticipants(data.voiceUsers ?? [])
+
+        if (voiceJoinedRef.current) {
+          socket.emit('join_voice')
+        }
+      })
+
+      socket.on('rooms_updated', (rooms: SubRoomInfo[]) => {
+        setAvailableRooms(rooms)
       })
 
       socket.on('user_joined', (user: RoomUser) => {
@@ -307,6 +326,18 @@ export function useProblemRoom() {
 
       socket.on('new_message', (msg: RoomMessage) => {
         setMessages((prev) => [...prev, msg])
+      })
+
+      socket.on('room_full', ({ roomNumber }: { roomNumber: number }) => {
+        const slug = slugRef.current
+        if (!slug) return
+        setAvailableRooms((prev) => {
+          const next = prev.find((r) => r.number !== roomNumber && r.userCount < r.capacity)
+          if (next) {
+            socket.emit('join_room', { problemSlug: slug, roomNumber: next.number })
+          }
+          return prev
+        })
       })
 
       socket.on('voice_state', async (data: { users: VoiceUser[]; peers: string[] }) => {
@@ -387,6 +418,8 @@ export function useProblemRoom() {
       setConnected(false)
       setRoomUsers([])
       setMessages([])
+      setCurrentRoomNumber(null)
+      setAvailableRooms([])
       setVoiceParticipants([])
       setVoiceJoined(false)
       setVoiceConnecting(false)
@@ -400,12 +433,24 @@ export function useProblemRoom() {
     socketRef.current?.emit('send_message', { content })
   }, [])
 
+  const joinRoom = useCallback((roomNumber: number) => {
+    const slug = slugRef.current
+    if (!slug || !socketRef.current?.connected) return
+    if (voiceJoinedRef.current) {
+      leaveVoice()
+    }
+    socketRef.current.emit('join_room', { problemSlug: slug, roomNumber })
+  }, [leaveVoice])
+
   return {
     roomUsers,
     messages,
     connected,
     problemSlug,
+    currentRoomNumber,
+    availableRooms,
     sendMessage,
+    joinRoom,
     voiceParticipants,
     voiceJoined,
     voiceConnecting,

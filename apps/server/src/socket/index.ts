@@ -5,6 +5,8 @@ import { db } from '../db/index.js'
 import { problemMessages, users } from '../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
 
+const ROOM_CAPACITY = 15
+
 interface SocketUser {
   id: string
   name: string
@@ -19,6 +21,12 @@ interface RoomPresence {
 interface VoiceParticipant {
   socketId: string
   user: SocketUser
+}
+
+export interface SubRoomInfo {
+  number: number
+  userCount: number
+  capacity: number
 }
 
 const rooms = new Map<string, Map<string, RoomPresence>>()
@@ -67,6 +75,30 @@ function removeVoiceSocket(socketId: string, roomId: string): boolean {
   const existed = room.delete(socketId)
   if (room.size === 0) voiceRooms.delete(roomId)
   return existed
+}
+
+function subRoomId(slug: string, n: number): string {
+  return `problem:${slug}:${n}`
+}
+
+function getProblemSubRooms(slug: string): SubRoomInfo[] {
+  const prefix = `problem:${slug}:`
+  const result: SubRoomInfo[] = []
+  for (const [roomId] of rooms.entries()) {
+    if (roomId.startsWith(prefix)) {
+      const number = parseInt(roomId.split(':')[2] ?? '0', 10)
+      result.push({ number, userCount: getRoomUsers(roomId).length, capacity: ROOM_CAPACITY })
+    }
+  }
+  return result.sort((a, b) => a.number - b.number)
+}
+
+function autoAssignRoom(slug: string): number {
+  const subRooms = getProblemSubRooms(slug)
+  for (const { number, userCount } of subRooms) {
+    if (userCount < ROOM_CAPACITY) return number
+  }
+  return (subRooms[subRooms.length - 1]?.number ?? 0) + 1
 }
 
 export function createSocketServer(httpServer: HttpServer): Server {
@@ -118,6 +150,7 @@ export function createSocketServer(httpServer: HttpServer): Server {
   io.on('connection', (socket) => {
     const user = socket.data['user'] as SocketUser
     let currentRoomId: string | null = null
+    let currentSlug: string | null = null
 
     const leaveVoiceRoom = (): void => {
       if (!currentRoomId) return
@@ -128,19 +161,38 @@ export function createSocketServer(httpServer: HttpServer): Server {
       }
     }
 
-    socket.on('join_room', async ({ problemSlug }: { problemSlug?: unknown }) => {
+    socket.on('join_room', async ({ problemSlug, roomNumber }: { problemSlug?: unknown; roomNumber?: unknown }) => {
       if (typeof problemSlug !== 'string' || !/^[a-z0-9-]+$/i.test(problemSlug)) return
+      const slug = problemSlug.toLowerCase()
 
-      if (currentRoomId) {
+      if (currentRoomId && currentSlug) {
         leaveVoiceRoom()
         const { userGone, userId } = removeSocket(socket.id, currentRoomId)
         if (userGone) socket.to(currentRoomId).emit('user_left', { id: userId })
         socket.leave(currentRoomId)
+        socket.leave(`problem:${currentSlug}`)
+        io.to(`problem:${currentSlug}`).emit('rooms_updated', getProblemSubRooms(currentSlug))
       }
 
-      const roomId = `problem:${problemSlug.toLowerCase()}`
+      const targetNumber =
+        typeof roomNumber === 'number' && Number.isInteger(roomNumber) && roomNumber >= 1
+          ? roomNumber
+          : autoAssignRoom(slug)
+
+      if (typeof roomNumber === 'number') {
+        const count = getRoomUsers(subRoomId(slug, targetNumber)).length
+        if (count >= ROOM_CAPACITY) {
+          socket.emit('room_full', { roomNumber: targetNumber })
+          return
+        }
+      }
+
+      const roomId = subRoomId(slug, targetNumber)
       currentRoomId = roomId
-      void socket.join(roomId)
+      currentSlug = slug
+
+      await socket.join(roomId)
+      await socket.join(`problem:${slug}`)
 
       if (!rooms.has(roomId)) rooms.set(roomId, new Map())
       rooms.get(roomId)!.set(socket.id, { socketId: socket.id, user })
@@ -156,7 +208,7 @@ export function createSocketServer(httpServer: HttpServer): Server {
         })
         .from(problemMessages)
         .leftJoin(users, eq(problemMessages.userId, users.id))
-        .where(eq(problemMessages.roomId, problemSlug.toLowerCase()))
+        .where(eq(problemMessages.roomId, roomId))
         .orderBy(desc(problemMessages.createdAt))
         .limit(50)
 
@@ -168,10 +220,13 @@ export function createSocketServer(httpServer: HttpServer): Server {
           createdAt: m.createdAt,
           author: { id: m.authorId, name: m.authorName, avatarUrl: m.authorAvatarUrl },
         })),
+        roomNumber: targetNumber,
+        rooms: getProblemSubRooms(slug),
         voiceUsers: getVoiceParticipants(roomId),
       })
 
       socket.to(roomId).emit('user_joined', { id: user.id, name: user.name, avatarUrl: user.avatarUrl })
+      io.to(`problem:${slug}`).emit('rooms_updated', getProblemSubRooms(slug))
     })
 
     socket.on('send_message', async ({ content }: { content?: unknown }) => {
@@ -180,10 +235,9 @@ export function createSocketServer(httpServer: HttpServer): Server {
       const trimmed = content.trim().slice(0, 500)
       if (!trimmed) return
 
-      const slug = currentRoomId.replace('problem:', '')
       const [msg] = await db
         .insert(problemMessages)
-        .values({ roomId: slug, userId: user.id, content: trimmed })
+        .values({ roomId: currentRoomId, userId: user.id, content: trimmed })
         .returning()
 
       if (!msg) return
@@ -280,10 +334,11 @@ export function createSocketServer(httpServer: HttpServer): Server {
     )
 
     socket.on('disconnect', () => {
-      if (currentRoomId) {
+      if (currentRoomId && currentSlug) {
         leaveVoiceRoom()
         const { userGone, userId } = removeSocket(socket.id, currentRoomId)
         if (userGone) socket.to(currentRoomId).emit('user_left', { id: userId })
+        io.to(`problem:${currentSlug}`).emit('rooms_updated', getProblemSubRooms(currentSlug))
       }
     })
   })
