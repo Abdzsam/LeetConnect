@@ -79,10 +79,15 @@ export function useProblemRoom() {
   const socketRef = useRef<Socket | null>(null)
   const slugRef = useRef(problemSlug)
   const voiceJoinedRef = useRef(false)
+  const voiceMutedRef = useRef(false)
   const localStreamRef = useRef<MediaStream | null>(null)
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map())
   const remoteAudioElsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
   const pendingIceCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map())
+
+  useEffect(() => {
+    voiceMutedRef.current = voiceMuted
+  }, [voiceMuted])
 
   const removeRemoteAudio = useCallback((socketId: string) => {
     const audio = remoteAudioElsRef.current.get(socketId)
@@ -127,10 +132,10 @@ export function useProblemRoom() {
 
     localStreamRef.current = stream
     stream.getAudioTracks().forEach((track) => {
-      track.enabled = !voiceMuted
+      track.enabled = !voiceMutedRef.current
     })
     return stream
-  }, [voiceMuted])
+  }, [])
 
   const createPeerConnection = useCallback(async (targetSocketId: string): Promise<RTCPeerConnection> => {
     const existing = peerConnectionsRef.current.get(targetSocketId)
@@ -201,6 +206,7 @@ export function useProblemRoom() {
     setVoiceMuted(false)
     setVoiceError(null)
     voiceJoinedRef.current = false
+    voiceMutedRef.current = false
   }, [closeAllPeerConnections])
 
   const joinVoice = useCallback(async () => {
@@ -235,12 +241,13 @@ export function useProblemRoom() {
   }, [currentRoomNumber, ensureLocalStream, problemSlug])
 
   const toggleMute = useCallback(() => {
-    const nextMuted = !voiceMuted
+    const nextMuted = !voiceMutedRef.current
     localStreamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = !nextMuted
     })
+    voiceMutedRef.current = nextMuted
     setVoiceMuted(nextMuted)
-  }, [voiceMuted])
+  }, [])
 
   useEffect(() => {
     const check = () => {
@@ -426,6 +433,7 @@ export function useProblemRoom() {
       setVoiceMuted(false)
       setVoiceError(null)
       voiceJoinedRef.current = false
+      voiceMutedRef.current = false
     }
   }, [closeAllPeerConnections, closePeerConnection, createPeerConnection, flushPendingIceCandidates])
 
