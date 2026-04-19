@@ -66,8 +66,9 @@ function initials(name: string | null): string {
 
 export const UserProfileCard: React.FC<{
   user: RoomUser
+  isOnline: boolean
   onClose: () => void
-}> = ({ user, onClose }) => {
+}> = ({ user, isOnline, onClose }) => {
   const { fetchUserProfile } = useSocialLinks()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -126,10 +127,12 @@ export const UserProfileCard: React.FC<{
             <div style={{ fontSize: 14, fontWeight: 600, color: LC.text, fontFamily: LC.font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user.name}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: LC.teal, flexShrink: 0, display: 'inline-block' }} />
-              <span style={{ fontSize: 11, color: LC.textSub, fontFamily: LC.font }}>Solving now</span>
-            </div>
+            {isOnline && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: LC.teal, flexShrink: 0, display: 'inline-block' }} />
+                <span style={{ fontSize: 11, color: LC.textSub, fontFamily: LC.font }}>Solving now</span>
+              </div>
+            )}
             {profile?.bio && (
               <div style={{
                 fontSize: 11, color: LC.textSub, fontFamily: LC.font,

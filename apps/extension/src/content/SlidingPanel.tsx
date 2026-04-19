@@ -605,6 +605,7 @@ const ProblemRoomContent: React.FC = () => {
       {selectedUser && (
         <UserProfileCard
           user={selectedUser}
+          isOnline={roomUsers.some((u) => u.id === selectedUser.id)}
           onClose={() => setSelectedUser(null)}
         />
       )}
