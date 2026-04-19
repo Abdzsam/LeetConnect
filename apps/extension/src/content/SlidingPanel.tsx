@@ -3,6 +3,27 @@ import { AuthGate } from './AuthGate'
 import { useAuth } from '../hooks/useAuth'
 import { useProblemRoom, type RoomUser, type RoomMessage, type SubRoomInfo } from '../hooks/useProblemRoom'
 
+// ─── LeetCode design tokens ───────────────────────────────────────────────────
+
+const LC = {
+  bg:        '#1a1a1a',
+  surface:   '#282828',
+  surfaceHi: '#333333',
+  border:    '#3e3e3e',
+  borderSub: '#2d2d2d',
+  orange:    '#ffa116',
+  orangeDim: 'rgba(255,161,22,0.15)',
+  teal:      '#00b8a3',
+  red:       '#ef4743',
+  redDim:    'rgba(239,71,67,0.15)',
+  text:      '#eff1f6',
+  textSub:   '#8d8d8d',
+  textMuted: '#565656',
+  font:      'system-ui, -apple-system, sans-serif',
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function formatTime(ts: number | string): string {
   const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
   if (diff < 60) return `${diff}s ago`
@@ -15,112 +36,88 @@ function initials(name: string | null | undefined): string {
   return name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-const Avatar: React.FC<{ name: string | null; url?: string | null }> = ({ name, url }) => (
-  <div
-    style={{
-      width: 32,
-      height: 32,
-      borderRadius: '50%',
-      background: url ? 'transparent' : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: 11,
-      fontWeight: 700,
-      color: '#fff',
-      flexShrink: 0,
-      fontFamily: 'system-ui, sans-serif',
-      letterSpacing: '0.05em',
-      overflow: 'hidden',
-    }}
-  >
-    {url ? (
-      <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-    ) : (
-      initials(name)
-    )}
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+
+const Avatar: React.FC<{ name: string | null; url?: string | null; size?: number }> = ({ name, url, size = 28 }) => (
+  <div style={{
+    width: size, height: size,
+    borderRadius: '50%',
+    background: url ? 'transparent' : LC.orangeDim,
+    border: `1px solid ${url ? 'transparent' : LC.orange}`,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: Math.floor(size * 0.38),
+    fontWeight: 600,
+    color: LC.orange,
+    flexShrink: 0,
+    fontFamily: LC.font,
+    overflow: 'hidden',
+  }}>
+    {url
+      ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      : initials(name)
+    }
   </div>
 )
 
-const SectionCard: React.FC<{
+// ─── Section ──────────────────────────────────────────────────────────────────
+
+const Section: React.FC<{
   title: string
-  icon: React.ReactNode
   badge?: number
   children: React.ReactNode
-}> = ({ title, icon, badge, children }) => (
-  <div
-    style={{
-      background: 'rgba(255,255,255,0.04)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderRadius: 12,
-      overflow: 'hidden',
-      marginBottom: 12,
-    }}
-  >
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '10px 14px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-      }}
-    >
-      <span style={{ color: '#a78bfa', display: 'flex' }}>{icon}</span>
-      <span
-        style={{
-          fontSize: 12,
-          fontWeight: 600,
-          color: '#e5e7eb',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          fontFamily: 'system-ui, sans-serif',
-          flex: 1,
-        }}
-      >
-        {title}
-      </span>
+}> = ({ title, badge, children }) => (
+  <div style={{
+    background: LC.surface,
+    border: `1px solid ${LC.border}`,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 8,
+  }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '8px 12px',
+      borderBottom: `1px solid ${LC.borderSub}`,
+    }}>
+      <span style={{
+        fontSize: 13, fontWeight: 500,
+        color: LC.text,
+        fontFamily: LC.font,
+        flex: 1,
+      }}>{title}</span>
       {badge !== undefined && (
-        <span
-          style={{
-            background: 'rgba(124,58,237,0.3)',
-            color: '#c4b5fd',
-            fontSize: 11,
-            fontWeight: 600,
-            padding: '1px 7px',
-            borderRadius: 10,
-            fontFamily: 'system-ui, sans-serif',
-          }}
-        >
-          {badge}
-        </span>
+        <span style={{
+          background: LC.orangeDim,
+          color: LC.orange,
+          fontSize: 11, fontWeight: 600,
+          padding: '1px 6px',
+          borderRadius: 4,
+          fontFamily: LC.font,
+        }}>{badge}</span>
       )}
     </div>
-    <div style={{ padding: '10px 14px' }}>{children}</div>
+    <div style={{ padding: '10px 12px' }}>{children}</div>
   </div>
 )
 
+// ─── No problem placeholder ───────────────────────────────────────────────────
+
 const NoProblemPlaceholder: React.FC = () => (
-  <div
-    style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flex: 1,
-      padding: '40px 24px',
-      textAlign: 'center',
-      gap: 12,
-    }}
-  >
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5" strokeLinecap="round">
+  <div style={{
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    flex: 1, padding: '48px 24px',
+    textAlign: 'center', gap: 10,
+  }}>
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={LC.textMuted} strokeWidth="1.5" strokeLinecap="round">
       <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
     </svg>
-    <p style={{ fontSize: 13, color: '#6b7280', fontFamily: 'system-ui, sans-serif', margin: 0, lineHeight: 1.6 }}>
+    <p style={{ fontSize: 13, color: LC.textSub, fontFamily: LC.font, margin: 0, lineHeight: 1.6 }}>
       Open a LeetCode problem to see who else is solving it.
     </p>
   </div>
 )
+
+// ─── Online section ───────────────────────────────────────────────────────────
 
 const OnlineSection: React.FC<{
   users: RoomUser[]
@@ -132,46 +129,33 @@ const OnlineSection: React.FC<{
   const [showRooms, setShowRooms] = useState(false)
 
   return (
-    <SectionCard
-      title={currentRoomNumber !== null ? `Room ${currentRoomNumber}` : 'Online Now'}
-      icon={
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="12" cy="8" r="4" />
-          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-        </svg>
-      }
-      badge={users.length}
-    >
+    <Section title={currentRoomNumber !== null ? `Room ${currentRoomNumber}` : 'Online'} badge={users.length}>
       {availableRooms.length > 0 && (
         <div style={{ marginBottom: 10 }}>
           <button
             type="button"
             onClick={() => setShowRooms((v) => !v)}
             style={{
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 6,
-              padding: '4px 10px',
+              background: 'transparent',
+              border: `1px solid ${LC.border}`,
+              borderRadius: 4,
+              padding: '3px 8px',
               fontSize: 11,
-              color: '#9ca3af',
+              color: LC.textSub,
               cursor: 'pointer',
-              fontFamily: 'system-ui, sans-serif',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
+              fontFamily: LC.font,
+              display: 'flex', alignItems: 'center', gap: 4,
             }}
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <rect x="3" y="3" width="7" height="7" />
-              <rect x="14" y="3" width="7" height="7" />
-              <rect x="3" y="14" width="7" height="7" />
-              <rect x="14" y="14" width="7" height="7" />
+              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
             </svg>
             {showRooms ? 'Hide rooms' : 'Switch room'}
           </button>
 
           {showRooms && (
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
               {availableRooms.map((room) => {
                 const isCurrent = room.number === currentRoomNumber
                 const isFull = room.userCount >= room.capacity
@@ -182,22 +166,20 @@ const OnlineSection: React.FC<{
                     disabled={isCurrent || isFull}
                     onClick={() => { onJoinRoom(room.number); setShowRooms(false) }}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      background: isCurrent ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.04)',
-                      border: `1px solid ${isCurrent ? 'rgba(124,58,237,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                      borderRadius: 6,
-                      padding: '5px 10px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      background: isCurrent ? LC.orangeDim : 'transparent',
+                      border: `1px solid ${isCurrent ? LC.orange : LC.border}`,
+                      borderRadius: 4,
+                      padding: '5px 8px',
                       cursor: isCurrent || isFull ? 'default' : 'pointer',
-                      opacity: isFull && !isCurrent ? 0.5 : 1,
+                      opacity: isFull && !isCurrent ? 0.45 : 1,
                     }}
                   >
-                    <span style={{ fontSize: 12, color: isCurrent ? '#c4b5fd' : '#d1d5db', fontFamily: 'system-ui, sans-serif', fontWeight: isCurrent ? 600 : 400 }}>
+                    <span style={{ fontSize: 12, color: isCurrent ? LC.orange : LC.text, fontFamily: LC.font, fontWeight: isCurrent ? 600 : 400 }}>
                       Room {room.number}{isCurrent ? ' (you)' : ''}
                     </span>
-                    <span style={{ fontSize: 11, color: '#6b7280', fontFamily: 'system-ui, sans-serif' }}>
-                      {room.userCount}/{room.capacity}{isFull ? ' full' : ''}
+                    <span style={{ fontSize: 11, color: LC.textSub, fontFamily: LC.font }}>
+                      {room.userCount}/{room.capacity}{isFull ? ' · full' : ''}
                     </span>
                   </button>
                 )
@@ -208,29 +190,38 @@ const OnlineSection: React.FC<{
       )}
 
       {users.length === 0 ? (
-        <p style={{ fontSize: 12, color: '#6b7280', fontFamily: 'system-ui, sans-serif', margin: 0 }}>
-          No one else is here yet.
+        <p style={{ fontSize: 12, color: LC.textSub, fontFamily: LC.font, margin: 0 }}>
+          No one else here yet.
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {users.map((user) => (
-            <div key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Avatar name={user.name} url={user.avatarUrl} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0, animation: 'lc-pulse 2s ease-in-out infinite' }} />
-                  <span style={{ fontSize: 13, fontWeight: 500, color: user.id === currentUserId ? '#a78bfa' : '#f3f4f6', fontFamily: 'system-ui, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user.name}{user.id === currentUserId ? ' (you)' : ''}
-                  </span>
-                </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  display: 'inline-block', width: 6, height: 6,
+                  borderRadius: '50%', background: LC.teal, flexShrink: 0,
+                  animation: 'lc-pulse 2s ease-in-out infinite',
+                }} />
+                <span style={{
+                  fontSize: 13, fontWeight: 400,
+                  color: user.id === currentUserId ? LC.orange : LC.text,
+                  fontFamily: LC.font,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {user.name}{user.id === currentUserId ? ' (you)' : ''}
+                </span>
               </div>
             </div>
           ))}
         </div>
       )}
-    </SectionCard>
+    </Section>
   )
 }
+
+// ─── Chat section ─────────────────────────────────────────────────────────────
 
 const ChatSection: React.FC<{
   messages: RoomMessage[]
@@ -252,66 +243,36 @@ const ChatSection: React.FC<{
     setDraft('')
   }, [draft, onSend])
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
-    },
-    [send],
-  )
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+  }, [send])
 
   return (
-    <SectionCard
-      title="Problem Chat"
-      icon={
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      }
-    >
+    <Section title="Chat">
       <div
         className="lc-scrollbar"
-        style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}
+        style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 10 }}
       >
         {messagesLoading ? (
-          <p style={{ fontSize: 12, color: '#6b7280', fontFamily: 'system-ui, sans-serif', margin: 0 }}>
-            Loading messages…
-          </p>
+          <p style={{ fontSize: 12, color: LC.textSub, fontFamily: LC.font, margin: 0 }}>Loading messages…</p>
         ) : messages.length === 0 ? (
-          <p style={{ fontSize: 12, color: '#6b7280', fontFamily: 'system-ui, sans-serif', margin: 0 }}>
-            No messages yet. Say hi!
-          </p>
+          <p style={{ fontSize: 12, color: LC.textSub, fontFamily: LC.font, margin: 0 }}>No messages yet. Say hi!</p>
         ) : (
           messages.map((msg) => {
             const isMe = msg.author.id === currentUserId
             return (
               <div key={msg.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <Avatar name={msg.author.name} url={msg.author.avatarUrl} />
+                <Avatar name={msg.author.name} url={msg.author.avatarUrl} size={24} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: isMe ? '#c4b5fd' : '#a78bfa',
-                        fontFamily: 'system-ui, sans-serif',
-                      }}
-                    >
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: isMe ? LC.orange : LC.text, fontFamily: LC.font }}>
                       {isMe ? 'You' : (msg.author.name ?? 'Unknown')}
                     </span>
-                    <span style={{ fontSize: 10, color: '#6b7280', fontFamily: 'system-ui, sans-serif' }}>
+                    <span style={{ fontSize: 10, color: LC.textMuted, fontFamily: LC.font }}>
                       {formatTime(msg.createdAt)}
                     </span>
                   </div>
-                  <p
-                    style={{
-                      fontSize: 12,
-                      color: '#d1d5db',
-                      margin: 0,
-                      lineHeight: 1.5,
-                      wordBreak: 'break-word',
-                      fontFamily: 'system-ui, sans-serif',
-                    }}
-                  >
+                  <p style={{ fontSize: 12, color: LC.textSub, margin: 0, lineHeight: 1.5, wordBreak: 'break-word', fontFamily: LC.font }}>
                     {msg.content}
                   </p>
                 </div>
@@ -322,54 +283,54 @@ const ChatSection: React.FC<{
         <div ref={bottomRef} />
       </div>
 
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
         <input
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Send a message…"
+          placeholder="Type a message…"
           maxLength={500}
           style={{
             flex: 1,
-            background: 'rgba(255,255,255,0.07)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 8,
-            padding: '7px 10px',
+            background: LC.surfaceHi,
+            border: `1px solid ${LC.border}`,
+            borderRadius: 4,
+            padding: '6px 10px',
             fontSize: 12,
-            color: '#f3f4f6',
+            color: LC.text,
             outline: 'none',
-            fontFamily: 'system-ui, sans-serif',
+            fontFamily: LC.font,
           }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(124,58,237,0.6)' }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)' }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = LC.orange }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = LC.border }}
         />
         <button
           type="button"
           onClick={send}
           disabled={!draft.trim()}
           style={{
-            background: draft.trim() ? 'linear-gradient(135deg, #7c3aed, #4f46e5)' : 'rgba(255,255,255,0.08)',
+            background: draft.trim() ? LC.orange : LC.surfaceHi,
             border: 'none',
-            borderRadius: 8,
-            padding: '7px 12px',
+            borderRadius: 4,
+            padding: '6px 10px',
             cursor: draft.trim() ? 'pointer' : 'not-allowed',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: draft.trim() ? 1 : 0.5,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: draft.trim() ? 1 : 0.4,
             flexShrink: 0,
           }}
-          aria-label="Send message"
+          aria-label="Send"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={draft.trim() ? '#1a1a1a' : LC.textSub} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" />
           </svg>
         </button>
       </div>
-    </SectionCard>
+    </Section>
   )
 }
+
+// ─── Voice section ────────────────────────────────────────────────────────────
 
 const VoiceSection: React.FC<{
   joined: boolean
@@ -381,114 +342,102 @@ const VoiceSection: React.FC<{
   onLeave: () => void
   onToggleMute: () => void
 }> = ({ joined, connecting, muted, participants, error, onJoin, onLeave, onToggleMute }) => (
-  <SectionCard
-    title="Voice Channel"
-    icon={
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-        <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-      </svg>
-    }
-  >
-    <div style={{ textAlign: 'center', paddingBottom: 4 }}>
-      <p style={{ fontSize: 11, color: '#a78bfa', marginTop: 0, marginBottom: 8, fontFamily: 'system-ui, sans-serif', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-        {participants.length} {participants.length === 1 ? 'person' : 'people'} in voice
-      </p>
-      {joined && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 4, marginBottom: 12, alignItems: 'flex-end', height: 24 }}>
-          {[3, 6, 4, 8, 5, 7, 3].map((h, i) => (
-            <div
-              key={i}
-              style={{ width: 3, height: h * 2, borderRadius: 2, background: 'linear-gradient(180deg, #7c3aed, #4f46e5)', animation: `lc-pulse ${0.8 + i * 0.15}s ease-in-out infinite` }}
-            />
-          ))}
-        </div>
-      )}
-      <p style={{ fontSize: 12, color: joined ? '#22c55e' : '#9ca3af', marginBottom: 12, fontFamily: 'system-ui, sans-serif', lineHeight: 1.5 }}>
-        {joined ? (muted ? 'Connected, microphone muted.' : 'Connected, microphone live.') : 'Join the room voice call for this problem.'}
-      </p>
+  <Section title="Voice">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 12, color: LC.textSub, fontFamily: LC.font }}>
+          {participants.length} in voice
+        </span>
+        {joined && (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 14 }}>
+            {[3, 5, 4, 7, 4, 6, 3].map((h, i) => (
+              <div key={i} style={{
+                width: 2, height: h * 1.8, borderRadius: 1,
+                background: muted ? LC.textMuted : LC.teal,
+                animation: muted ? 'none' : `lc-pulse ${0.7 + i * 0.12}s ease-in-out infinite`,
+              }} />
+            ))}
+          </div>
+        )}
+      </div>
+
       {error && (
-        <div
-          style={{
-            background: 'rgba(239,68,68,0.12)',
-            border: '1px solid rgba(239,68,68,0.25)',
-            borderRadius: 8,
-            padding: '8px 10px',
-            marginBottom: 12,
-            fontSize: 11,
-            color: '#fca5a5',
-            fontFamily: 'system-ui, sans-serif',
-            lineHeight: 1.5,
-          }}
-        >
+        <div style={{
+          background: LC.redDim,
+          border: `1px solid ${LC.red}`,
+          borderRadius: 4, padding: '6px 8px',
+          fontSize: 11, color: '#ff6b6b',
+          fontFamily: LC.font, lineHeight: 1.5,
+        }}>
           {error}
         </div>
       )}
-      <button
-        type="button"
-        onClick={joined ? onLeave : onJoin}
-        disabled={connecting}
-        style={{
-          width: '100%',
-          padding: '8px 0',
-          borderRadius: 8,
-          border: 'none',
-          cursor: connecting ? 'wait' : 'pointer',
-          fontSize: 13,
-          fontWeight: 600,
-          fontFamily: 'system-ui, sans-serif',
-          background: joined ? 'rgba(239,68,68,0.2)' : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-          color: joined ? '#fca5a5' : '#fff',
-          opacity: connecting ? 0.7 : 1,
-          marginBottom: joined ? 8 : 0,
-        }}
-      >
-        {connecting ? 'Joining Voice…' : joined ? 'Leave Channel' : 'Join Voice Channel'}
-      </button>
-      {joined && (
+
+      <div style={{ display: 'flex', gap: 6 }}>
         <button
           type="button"
-          onClick={onToggleMute}
+          onClick={joined ? onLeave : onJoin}
+          disabled={connecting}
           style={{
-            width: '100%',
-            padding: '8px 0',
-            borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.12)',
-            cursor: 'pointer',
-            fontSize: 12,
-            fontWeight: 600,
-            fontFamily: 'system-ui, sans-serif',
-            background: 'rgba(255,255,255,0.06)',
-            color: muted ? '#fca5a5' : '#d1d5db',
+            flex: 1,
+            padding: '6px 0',
+            borderRadius: 4,
+            border: joined ? `1px solid ${LC.red}` : 'none',
+            cursor: connecting ? 'wait' : 'pointer',
+            fontSize: 12, fontWeight: 500,
+            fontFamily: LC.font,
+            background: joined ? LC.redDim : LC.orange,
+            color: joined ? '#ff6b6b' : '#1a1a1a',
+            opacity: connecting ? 0.6 : 1,
           }}
         >
-          {muted ? 'Unmute Microphone' : 'Mute Microphone'}
+          {connecting ? 'Joining…' : joined ? 'Leave' : 'Join Voice'}
         </button>
-      )}
+        {joined && (
+          <button
+            type="button"
+            onClick={onToggleMute}
+            style={{
+              padding: '6px 10px',
+              borderRadius: 4,
+              border: `1px solid ${LC.border}`,
+              cursor: 'pointer',
+              fontSize: 12, fontWeight: 500,
+              fontFamily: LC.font,
+              background: muted ? LC.orangeDim : LC.surfaceHi,
+              color: muted ? LC.orange : LC.textSub,
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            {muted ? (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="1" y1="1" x2="23" y2="23" />
+                <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+                <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23M12 19v4M8 23h8" />
+              </svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" />
+              </svg>
+            )}
+            {muted ? 'Unmute' : 'Mute'}
+          </button>
+        )}
+      </div>
     </div>
-  </SectionCard>
+  </Section>
 )
+
+// ─── Problem room content ─────────────────────────────────────────────────────
 
 const ProblemRoomContent: React.FC = () => {
   const { state } = useAuth()
   const {
-    roomUsers,
-    messages,
-    messagesLoading,
-    connected,
-    problemSlug,
-    currentRoomNumber,
-    availableRooms,
-    sendMessage,
-    joinRoom,
-    voiceParticipants,
-    voiceJoined,
-    voiceConnecting,
-    voiceMuted,
-    voiceError,
-    joinVoice,
-    leaveVoice,
-    toggleMute,
+    roomUsers, messages, messagesLoading, connected, problemSlug,
+    currentRoomNumber, availableRooms, sendMessage, joinRoom,
+    voiceParticipants, voiceJoined, voiceConnecting, voiceMuted,
+    voiceError, joinVoice, leaveVoice, toggleMute,
   } = useProblemRoom()
 
   if (state.status !== 'authenticated') return null
@@ -497,26 +446,20 @@ const ProblemRoomContent: React.FC = () => {
   return (
     <>
       {!connected && (
-        <div
-          style={{
-            background: 'rgba(239,68,68,0.12)',
-            border: '1px solid rgba(239,68,68,0.2)',
-            borderRadius: 8,
-            padding: '6px 12px',
-            marginBottom: 10,
-            fontSize: 11,
-            color: '#fca5a5',
-            fontFamily: 'system-ui, sans-serif',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />
-          Connecting to server…
+        <div style={{
+          background: LC.redDim,
+          border: `1px solid ${LC.red}`,
+          borderRadius: 4,
+          padding: '5px 10px',
+          marginBottom: 8,
+          fontSize: 11, color: '#ff6b6b',
+          fontFamily: LC.font,
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <span style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: LC.red, flexShrink: 0 }} />
+          Connecting…
         </div>
       )}
-
       <OnlineSection
         users={roomUsers}
         currentUserId={state.user.id}
@@ -524,12 +467,17 @@ const ProblemRoomContent: React.FC = () => {
         availableRooms={availableRooms}
         onJoinRoom={joinRoom}
       />
-      <ChatSection messages={messages} messagesLoading={messagesLoading} onSend={sendMessage} currentUserId={state.user.id} />
+      <ChatSection
+        messages={messages}
+        messagesLoading={messagesLoading}
+        onSend={sendMessage}
+        currentUserId={state.user.id}
+      />
       <VoiceSection
         joined={voiceJoined}
         connecting={voiceConnecting}
         muted={voiceMuted}
-        participants={voiceParticipants.map((entry) => entry.user)}
+        participants={voiceParticipants.map((e) => e.user)}
         error={voiceError}
         onJoin={joinVoice}
         onLeave={leaveVoice}
@@ -539,26 +487,11 @@ const ProblemRoomContent: React.FC = () => {
   )
 }
 
-const ChevronIcon: React.FC<{ open: boolean }> = ({ open }) => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="white"
-    strokeWidth="2.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{ display: 'block', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 350ms cubic-bezier(0.4, 0, 0.2, 1)' }}
-  >
-    <polyline points="15 18 9 12 15 6" />
-  </svg>
-)
+// ─── Sliding panel ────────────────────────────────────────────────────────────
 
 export const SlidingPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
   const { state, signOut } = useAuth()
-
   const toggle = useCallback(() => setIsOpen((v) => !v), [])
 
   useEffect(() => {
@@ -567,110 +500,83 @@ export const SlidingPanel: React.FC = () => {
     return () => document.removeEventListener('keyup', onKey)
   }, [isOpen])
 
-  const PANEL_WIDTH = 320
-  const TAB_WIDTH = 48
-  const TAB_HEIGHT = 80
+  const PANEL_WIDTH = 300
+  const TAB_WIDTH = 36
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        right: 0,
-        height: '100vh',
-        width: PANEL_WIDTH,
-        zIndex: 2147483647,
-        pointerEvents: 'none',
-        transform: isOpen ? 'translateX(0)' : `translateX(${PANEL_WIDTH}px)`,
-        transition: 'transform 350ms cubic-bezier(0.4, 0, 0.2, 1)',
-      }}
-    >
+    <div style={{
+      position: 'fixed', top: 0, right: 0,
+      height: '100vh', width: PANEL_WIDTH,
+      zIndex: 2147483647, pointerEvents: 'none',
+      transform: isOpen ? 'translateX(0)' : `translateX(${PANEL_WIDTH}px)`,
+      transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+    }}>
+      {/* Tab */}
       <button
         type="button"
         onClick={toggle}
-        aria-label={isOpen ? 'Close LeetConnect panel' : 'Open LeetConnect panel'}
+        aria-label={isOpen ? 'Close LeetConnect' : 'Open LeetConnect'}
         aria-expanded={isOpen}
         style={{
           position: 'absolute',
-          left: -TAB_WIDTH,
-          top: '50%',
+          left: -TAB_WIDTH, top: '50%',
           transform: 'translateY(-50%)',
-          width: TAB_WIDTH,
-          height: TAB_HEIGHT,
-          borderRadius: '12px 0 0 12px',
-          background: 'linear-gradient(160deg, #7c3aed 0%, #4f46e5 100%)',
-          boxShadow: '0 4px 24px rgba(124,58,237,0.4)',
+          width: TAB_WIDTH, height: 72,
+          borderRadius: '6px 0 0 6px',
+          background: LC.orange,
           border: 'none',
           cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          pointerEvents: 'auto',
-          padding: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'auto', padding: 0,
           outline: 'none',
-          WebkitTapHighlightColor: 'transparent',
+          boxShadow: '-2px 0 12px rgba(0,0,0,0.4)',
         }}
-        onFocus={(e) => { e.currentTarget.style.outline = '2px solid rgba(167,139,250,0.8)'; e.currentTarget.style.outlineOffset = '2px' }}
+        onFocus={(e) => { e.currentTarget.style.outline = `2px solid ${LC.orange}`; e.currentTarget.style.outlineOffset = '2px' }}
         onBlur={(e) => { e.currentTarget.style.outline = 'none' }}
       >
-        <ChevronIcon open={isOpen} />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          style={{ transform: isOpen ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 300ms' }}>
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
       </button>
 
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          background: '#1a1a2e',
-          borderRadius: '16px 0 0 16px',
-          boxShadow: '-8px 0 40px rgba(0,0,0,0.5)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          pointerEvents: 'auto',
-        }}
-      >
-        <div
-          style={{
-            background: 'linear-gradient(135deg, rgba(124,58,237,0.3) 0%, rgba(79,70,229,0.2) 100%)',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
-            padding: '16px 18px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
+      {/* Panel body */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0,
+        width: '100%', height: '100%',
+        background: LC.bg,
+        borderLeft: `1px solid ${LC.border}`,
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden', pointerEvents: 'auto',
+      }}>
+        {/* Header */}
+        <div style={{
+          background: LC.surface,
+          borderBottom: `1px solid ${LC.border}`,
+          padding: '10px 14px',
+          display: 'flex', alignItems: 'center', gap: 10,
+          flexShrink: 0,
+        }}>
+          <div style={{
+            width: 28, height: 28,
+            borderRadius: 4,
+            background: LC.orangeDim,
+            border: `1px solid ${LC.orange}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 700,
+            color: LC.orange,
+            fontFamily: LC.font,
             flexShrink: 0,
-          }}
-        >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 15,
-              fontWeight: 800,
-              color: '#fff',
-              fontFamily: 'system-ui, sans-serif',
-              boxShadow: '0 2px 12px rgba(124,58,237,0.5)',
-              flexShrink: 0,
-              letterSpacing: '-0.03em',
-            }}
-          >
-            LC
-          </div>
+          }}>LC</div>
+
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#f3f4f6', fontFamily: 'system-ui, sans-serif', lineHeight: 1.2 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: LC.text, fontFamily: LC.font, lineHeight: 1.2 }}>
               LeetConnect
             </div>
-            <div style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'system-ui, sans-serif', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 11, color: LC.textSub, fontFamily: LC.font, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {state.status === 'authenticated' ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: LC.teal, flexShrink: 0 }} />
                   {state.user.name}
                 </span>
               ) : 'Sign in to connect'}
@@ -683,11 +589,19 @@ export const SlidingPanel: React.FC = () => {
               onClick={signOut}
               aria-label="Sign out"
               title="Sign out"
-              style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.15)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
+              style={{
+                width: 26, height: 26,
+                borderRadius: 4,
+                background: 'transparent',
+                border: `1px solid ${LC.border}`,
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = LC.red; e.currentTarget.style.background = LC.redDim }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = LC.border; e.currentTarget.style.background = 'transparent' }}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={LC.textSub} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />
@@ -699,26 +613,35 @@ export const SlidingPanel: React.FC = () => {
             type="button"
             onClick={toggle}
             aria-label="Close panel"
-            style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.13)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
+            style={{
+              width: 26, height: 26,
+              borderRadius: 4,
+              background: 'transparent',
+              border: `1px solid ${LC.border}`,
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = LC.surfaceHi }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={LC.textSub} strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
         </div>
 
-        <div className="lc-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '14px 14px 8px', display: 'flex', flexDirection: 'column' }}>
+        {/* Content */}
+        <div className="lc-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '10px 10px 6px', display: 'flex', flexDirection: 'column' }}>
           <AuthGate>
             <ProblemRoomContent />
           </AuthGate>
         </div>
 
-        <div style={{ padding: '8px 18px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <span style={{ fontSize: 10, color: '#4b5563', fontFamily: 'system-ui, sans-serif' }}>v0.1.0</span>
-          <span style={{ fontSize: 10, color: '#4b5563', fontFamily: 'system-ui, sans-serif' }}>LeetConnect</span>
+        {/* Footer */}
+        <div style={{ padding: '6px 14px', borderTop: `1px solid ${LC.borderSub}`, display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
+          <span style={{ fontSize: 10, color: LC.textMuted, fontFamily: LC.font }}>v0.1.0</span>
+          <span style={{ fontSize: 10, color: LC.textMuted, fontFamily: LC.font }}>LeetConnect</span>
         </div>
       </div>
     </div>
