@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { AuthGate } from './AuthGate'
 import { useAuth } from '../hooks/useAuth'
-import { useProblemRoom, type RoomUser, type RoomMessage, type SubRoomInfo } from '../hooks/useProblemRoom'
+import { useProblemRoom, type RoomUser, type RoomMessage, type SubRoomInfo, type VoiceUser } from '../hooks/useProblemRoom'
 
 // ─── LeetCode design tokens ───────────────────────────────────────────────────
 
@@ -330,36 +330,106 @@ const ChatSection: React.FC<{
   )
 }
 
+// ─── Voice avatar ─────────────────────────────────────────────────────────────
+
+const VoiceAvatar: React.FC<{
+  user: RoomUser
+  speaking: boolean
+  isLocal: boolean
+  muted?: boolean
+}> = ({ user, speaking, isLocal, muted }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, width: 58 }}>
+    <div style={{
+      position: 'relative',
+      width: 48, height: 48,
+    }}>
+      {/* Speaking ring */}
+      <div style={{
+        position: 'absolute', inset: -3,
+        borderRadius: '50%',
+        border: `3px solid ${speaking ? LC.orange : 'transparent'}`,
+        boxShadow: speaking ? `0 0 12px rgba(255,161,22,0.55)` : 'none',
+        transition: 'border-color 120ms, box-shadow 120ms',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        width: 48, height: 48, borderRadius: '50%',
+        background: user.avatarUrl ? 'transparent' : LC.orangeDim,
+        border: `2px solid ${speaking ? LC.orange : LC.border}`,
+        overflow: 'hidden',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 15, fontWeight: 700, color: LC.orange,
+        transition: 'border-color 120ms',
+      }}>
+        {user.avatarUrl
+          ? <img src={user.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : initials(user.name)
+        }
+      </div>
+      {/* Muted badge */}
+      {isLocal && muted && (
+        <div style={{
+          position: 'absolute', bottom: -2, right: -2,
+          width: 16, height: 16, borderRadius: '50%',
+          background: LC.red,
+          border: `2px solid ${LC.surface}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round">
+            <line x1="1" y1="1" x2="23" y2="23" />
+            <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+          </svg>
+        </div>
+      )}
+    </div>
+    <span style={{
+      fontSize: 11, color: isLocal ? LC.orange : LC.textSub,
+      fontFamily: LC.font, textAlign: 'center',
+      overflow: 'hidden', textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap', maxWidth: '100%', lineHeight: 1.2,
+    }}>
+      {isLocal ? 'You' : (user.name?.split(' ')[0] ?? '?')}
+    </span>
+  </div>
+)
+
 // ─── Voice section ────────────────────────────────────────────────────────────
 
 const VoiceSection: React.FC<{
   joined: boolean
   connecting: boolean
   muted: boolean
-  participants: RoomUser[]
+  participants: VoiceUser[]
+  speakingSocketIds: Set<string>
+  localSocketId: string | null
   error: string | null
   onJoin: () => void
   onLeave: () => void
   onToggleMute: () => void
-}> = ({ joined, connecting, muted, participants, error, onJoin, onLeave, onToggleMute }) => (
-  <Section title="Voice">
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 12, color: LC.textSub, fontFamily: LC.font }}>
-          {participants.length} in voice
-        </span>
-        {joined && (
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 14 }}>
-            {[3, 5, 4, 7, 4, 6, 3].map((h, i) => (
-              <div key={i} style={{
-                width: 2, height: h * 1.8, borderRadius: 1,
-                background: muted ? LC.textMuted : LC.teal,
-                animation: muted ? 'none' : `lc-pulse ${0.7 + i * 0.12}s ease-in-out infinite`,
-              }} />
-            ))}
-          </div>
-        )}
-      </div>
+}> = ({ joined, connecting, muted, participants, speakingSocketIds, localSocketId, error, onJoin, onLeave, onToggleMute }) => (
+  <Section title="Voice" badge={participants.length > 0 ? participants.length : undefined}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+      {/* Participant avatars */}
+      {participants.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          {participants.map(({ socketId, user }) => (
+            <VoiceAvatar
+              key={socketId}
+              user={user}
+              speaking={speakingSocketIds.has(socketId)}
+              isLocal={socketId === localSocketId}
+              muted={socketId === localSocketId ? muted : undefined}
+            />
+          ))}
+        </div>
+      )}
+
+      {!joined && participants.length === 0 && (
+        <p style={{ fontSize: 12, color: LC.textSub, fontFamily: LC.font, margin: 0 }}>
+          No one in voice yet.
+        </p>
+      )}
 
       {error && (
         <div style={{
@@ -391,7 +461,7 @@ const VoiceSection: React.FC<{
             opacity: connecting ? 0.6 : 1,
           }}
         >
-          {connecting ? 'Joining…' : joined ? 'Leave' : 'Join Voice'}
+          {connecting ? 'Joining…' : joined ? 'Leave Voice' : 'Join Voice'}
         </button>
         {joined && (
           <button
@@ -438,6 +508,7 @@ const ProblemRoomContent: React.FC = () => {
     currentRoomNumber, availableRooms, sendMessage, joinRoom,
     voiceParticipants, voiceJoined, voiceConnecting, voiceMuted,
     voiceError, joinVoice, leaveVoice, toggleMute,
+    speakingSocketIds, localSocketId,
   } = useProblemRoom()
 
   if (state.status !== 'authenticated') return null
@@ -477,7 +548,9 @@ const ProblemRoomContent: React.FC = () => {
         joined={voiceJoined}
         connecting={voiceConnecting}
         muted={voiceMuted}
-        participants={voiceParticipants.map((e) => e.user)}
+        participants={voiceParticipants}
+        speakingSocketIds={speakingSocketIds}
+        localSocketId={localSocketId}
         error={voiceError}
         onJoin={joinVoice}
         onLeave={leaveVoice}

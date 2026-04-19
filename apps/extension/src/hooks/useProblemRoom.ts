@@ -76,6 +76,8 @@ export function useProblemRoom() {
   const [voiceConnecting, setVoiceConnecting] = useState(false)
   const [voiceMuted, setVoiceMuted] = useState(false)
   const [voiceError, setVoiceError] = useState<string | null>(null)
+  const [speakingSocketIds, setSpeakingSocketIds] = useState<Set<string>>(new Set())
+  const [localSocketId, setLocalSocketId] = useState<string | null>(null)
 
   const socketRef = useRef<Socket | null>(null)
   const slugRef = useRef(problemSlug)
@@ -85,10 +87,65 @@ export function useProblemRoom() {
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map())
   const remoteAudioElsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
   const pendingIceCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map())
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const analysersRef = useRef<Map<string, AnalyserNode>>(new Map())
+  const analyserBuffersRef = useRef<Map<string, Float32Array>>(new Map())
+  const speakLoopRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     voiceMutedRef.current = voiceMuted
   }, [voiceMuted])
+
+  const monitorStream = useCallback((socketId: string, stream: MediaStream) => {
+    try {
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioContext()
+      }
+      const ctx = audioCtxRef.current
+      if (ctx.state === 'suspended') void ctx.resume()
+      const source = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 512
+      analyser.smoothingTimeConstant = 0.3
+      source.connect(analyser)
+      analysersRef.current.set(socketId, analyser)
+      analyserBuffersRef.current.set(socketId, new Float32Array(analyser.fftSize))
+    } catch {
+      // Audio monitoring unavailable in this context
+    }
+  }, [])
+
+  const startSpeakLoop = useCallback(() => {
+    if (speakLoopRef.current) return
+    speakLoopRef.current = setInterval(() => {
+      const speaking = new Set<string>()
+      for (const [id, analyser] of analysersRef.current) {
+        const buf = analyserBuffersRef.current.get(id)
+        if (!buf) continue
+        analyser.getFloatTimeDomainData(buf)
+        let sum = 0
+        for (const s of buf) sum += s * s
+        if (Math.sqrt(sum / buf.length) > 0.01) speaking.add(id)
+      }
+      setSpeakingSocketIds(speaking)
+    }, 80)
+  }, [])
+
+  const stopMonitoringAll = useCallback(() => {
+    if (speakLoopRef.current) {
+      clearInterval(speakLoopRef.current)
+      speakLoopRef.current = null
+    }
+    analysersRef.current.clear()
+    analyserBuffersRef.current.clear()
+    try {
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        void audioCtxRef.current.close()
+      }
+    } catch { /* ignore */ }
+    audioCtxRef.current = null
+    setSpeakingSocketIds(new Set())
+  }, [])
 
   const removeRemoteAudio = useCallback((socketId: string) => {
     const audio = remoteAudioElsRef.current.get(socketId)
@@ -174,6 +231,7 @@ export function useProblemRoom() {
       void audio.play().catch(() => {
         setVoiceError('Chrome blocked autoplay for a remote audio stream. Rejoin voice after interacting with the page.')
       })
+      monitorStream(targetSocketId, stream)
     }
 
     const stream = await ensureLocalStream()
@@ -182,7 +240,7 @@ export function useProblemRoom() {
     })
 
     return peer
-  }, [ensureLocalStream])
+  }, [ensureLocalStream, monitorStream])
 
   const flushPendingIceCandidates = useCallback(async (socketId: string) => {
     const peer = peerConnectionsRef.current.get(socketId)
@@ -201,6 +259,8 @@ export function useProblemRoom() {
     closeAllPeerConnections()
     stopStream(localStreamRef.current)
     localStreamRef.current = null
+    stopMonitoringAll()
+    setLocalSocketId(null)
     setVoiceParticipants([])
     setVoiceJoined(false)
     setVoiceConnecting(false)
@@ -208,7 +268,7 @@ export function useProblemRoom() {
     setVoiceError(null)
     voiceJoinedRef.current = false
     voiceMutedRef.current = false
-  }, [closeAllPeerConnections])
+  }, [closeAllPeerConnections, stopMonitoringAll])
 
   const joinVoice = useCallback(async () => {
     if (!problemSlug) {
@@ -226,20 +286,26 @@ export function useProblemRoom() {
     setVoiceError(null)
 
     try {
-      await ensureLocalStream()
+      const stream = await ensureLocalStream()
+      const sid = socket.id
+      setLocalSocketId(sid)
+      monitorStream(sid, stream)
+      startSpeakLoop()
       voiceJoinedRef.current = true
       setVoiceJoined(true)
       socket.emit('join_voice')
     } catch (error) {
       stopStream(localStreamRef.current)
       localStreamRef.current = null
+      stopMonitoringAll()
+      setLocalSocketId(null)
       setVoiceJoined(false)
       voiceJoinedRef.current = false
       setVoiceError(error instanceof Error ? error.message : 'Unable to access your microphone.')
     } finally {
       setVoiceConnecting(false)
     }
-  }, [currentRoomNumber, ensureLocalStream, problemSlug])
+  }, [currentRoomNumber, ensureLocalStream, monitorStream, problemSlug, startSpeakLoop, stopMonitoringAll])
 
   const toggleMute = useCallback(() => {
     const nextMuted = !voiceMutedRef.current
@@ -429,6 +495,8 @@ export function useProblemRoom() {
       closeAllPeerConnections()
       stopStream(localStreamRef.current)
       localStreamRef.current = null
+      stopMonitoringAll()
+      setLocalSocketId(null)
       setConnected(false)
       setRoomUsers([])
       setMessages([])
@@ -443,7 +511,7 @@ export function useProblemRoom() {
       voiceJoinedRef.current = false
       voiceMutedRef.current = false
     }
-  }, [closeAllPeerConnections, closePeerConnection, createPeerConnection, flushPendingIceCandidates])
+  }, [closeAllPeerConnections, closePeerConnection, createPeerConnection, flushPendingIceCandidates, stopMonitoringAll])
 
   const sendMessage = useCallback((content: string) => {
     socketRef.current?.emit('send_message', { content })
@@ -476,5 +544,7 @@ export function useProblemRoom() {
     joinVoice,
     leaveVoice,
     toggleMute,
+    speakingSocketIds,
+    localSocketId,
   }
 }
