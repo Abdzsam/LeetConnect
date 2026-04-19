@@ -6,6 +6,8 @@ node_modules/
 dist/
 build/
 .turbo/
+coverage/
+*.zip
 
 # Environment files
 .env
