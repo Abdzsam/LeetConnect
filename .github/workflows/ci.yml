@@ -35,7 +35,14 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        run: npm test
+        run: npm test -- --coverage
+
+      - name: Upload server coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-coverage-${{ github.sha }}
+          path: apps/server/coverage/
+          retention-days: 7
 
       - name: Build
         run: npm run build
@@ -64,7 +71,14 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        run: npm test
+        run: npm test -- --coverage
+
+      - name: Upload extension coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-coverage-${{ github.sha }}
+          path: apps/extension/coverage/
+          retention-days: 7
 
       - name: Build
         run: npm run build
