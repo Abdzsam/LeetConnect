@@ -16,6 +16,7 @@ export interface SocialLink {
 
 export interface UserProfile {
   name: string
+  bio: string | null
   avatarUrl: string | null
   links: SocialLink[]
 }
@@ -111,11 +112,35 @@ export function useSocialLinks() {
       const res = await fetch(`${SERVER_URL}/users/${userId}/socials`)
       if (!res.ok) return null
       const data = (await res.json()) as { ok: boolean } & UserProfile
-      return data.ok ? { name: data.name, avatarUrl: data.avatarUrl, links: data.links } : null
+      return data.ok ? { name: data.name, bio: data.bio ?? null, avatarUrl: data.avatarUrl, links: data.links } : null
     } catch {
       return null
     }
   }, [])
 
-  return { links, loading, saving, error, fetchOwnLinks, saveLinks, fetchUserProfile }
+  const fetchOwnProfile = useCallback(async (): Promise<{ name: string; bio: string | null; avatarUrl: string | null } | null> => {
+    try {
+      const res = await authedFetch('/profile')
+      if (!res.ok) return null
+      const data = (await res.json()) as { ok: boolean; name: string; bio: string | null; avatarUrl: string | null }
+      return data.ok ? { name: data.name, bio: data.bio ?? null, avatarUrl: data.avatarUrl } : null
+    } catch {
+      return null
+    }
+  }, [])
+
+  const saveProfile = useCallback(async (bio: string): Promise<boolean> => {
+    try {
+      const res = await authedFetch('/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bio }),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  }, [])
+
+  return { links, loading, saving, error, fetchOwnLinks, saveLinks, fetchUserProfile, fetchOwnProfile, saveProfile }
 }

@@ -110,7 +110,7 @@ describe('useSocialLinks fetch helpers', () => {
   })
 
   it('fetchUserProfile calls correct endpoint and parses response', async () => {
-    const profile = { ok: true, name: 'Alice', avatarUrl: null, links: [{ platform: 'github', value: 'alice' }] }
+    const profile = { ok: true, name: 'Alice', bio: null, avatarUrl: null, links: [{ platform: 'github', value: 'alice' }] }
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => profile })
 
     // Import dynamically so __SERVER_URL__ is resolved via vitest define
@@ -128,7 +128,7 @@ describe('useSocialLinks fetch helpers', () => {
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('/users/00000000-0000-0000-0000-000000000001/socials'),
     )
-    expect(result!).toEqual({ name: 'Alice', avatarUrl: null, links: [{ platform: 'github', value: 'alice' }] })
+    expect(result!).toEqual({ name: 'Alice', bio: null, avatarUrl: null, links: [{ platform: 'github', value: 'alice' }] })
   })
 
   it('fetchUserProfile returns null on non-ok response', async () => {

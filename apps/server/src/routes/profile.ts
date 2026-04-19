@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const BIO_MAX = 300
 
 export function isValidSocialValue(platform: SocialPlatform, value: string): boolean {
   const v = value.trim()
@@ -57,6 +58,50 @@ export function normalizeSocialLinks(
 // ─── Plugin ───────────────────────────────────────────────────────────────────
 
 export default async function profileRoutes(fastify: FastifyInstance): Promise<void> {
+  // ── GET /profile ─────────────────────────────────────────────────────────────
+  fastify.get(
+    '/profile',
+    { preHandler: fastify.authenticate },
+    async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const userId = request.user!.id
+      const [user] = await db
+        .select({ name: users.name, bio: users.bio, avatarUrl: users.avatarUrl })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1)
+      reply.code(200).send({ ok: true, ...user })
+    },
+  )
+
+  // ── PUT /profile ─────────────────────────────────────────────────────────────
+  fastify.put(
+    '/profile',
+    { preHandler: fastify.authenticate },
+    async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const body = request.body as Record<string, unknown> | null | undefined
+      const rawBio = body?.['bio']
+
+      if (rawBio !== undefined && rawBio !== null) {
+        if (typeof rawBio !== 'string') {
+          reply.code(400).send({ ok: false, error: 'bio must be a string' })
+          return
+        }
+        if (rawBio.length > BIO_MAX) {
+          reply.code(400).send({ ok: false, error: `bio must be ${BIO_MAX} characters or fewer` })
+          return
+        }
+      }
+
+      const bio = typeof rawBio === 'string' ? rawBio.trim() || null : undefined
+
+      await db.update(users)
+        .set({ ...(bio !== undefined ? { bio } : {}), updatedAt: new Date() })
+        .where(eq(users.id, request.user!.id))
+
+      reply.code(200).send({ ok: true })
+    },
+  )
+
   // ── GET /profile/socials ─────────────────────────────────────────────────────
   fastify.get(
     '/profile/socials',
@@ -111,7 +156,7 @@ export default async function profileRoutes(fastify: FastifyInstance): Promise<v
       }
 
       const [user] = await db
-        .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
+        .select({ id: users.id, name: users.name, bio: users.bio, avatarUrl: users.avatarUrl })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1)
@@ -129,6 +174,7 @@ export default async function profileRoutes(fastify: FastifyInstance): Promise<v
       reply.code(200).send({
         ok: true,
         name: user.name,
+        bio: user.bio,
         avatarUrl: user.avatarUrl,
         links,
       })

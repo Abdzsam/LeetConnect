@@ -24,6 +24,8 @@ function buildDefaultHook(overrides: Partial<ReturnType<typeof mockUseSocialLink
     error: null,
     fetchOwnLinks: vi.fn().mockResolvedValue(undefined),
     saveLinks: vi.fn().mockResolvedValue(true),
+    saveProfile: vi.fn().mockResolvedValue(true),
+    fetchOwnProfile: vi.fn().mockResolvedValue({ name: 'Test', bio: null, avatarUrl: null }),
     ...overrides,
   }
 }
@@ -42,7 +44,6 @@ describe('ProfileEditor', () => {
   it('renders inputs for all 7 platforms', () => {
     mockUseSocialLinks.mockReturnValue(buildDefaultHook())
     render(<ProfileEditor onBack={vi.fn()} />)
-    // Each platform renders a label; check for all 7 platform labels
     expect(screen.getByText('GitHub')).toBeDefined()
     expect(screen.getByText('LinkedIn')).toBeDefined()
     expect(screen.getByText('Instagram')).toBeDefined()
@@ -50,6 +51,12 @@ describe('ProfileEditor', () => {
     expect(screen.getByText('HackerRank')).toBeDefined()
     expect(screen.getByText('Codeforces')).toBeDefined()
     expect(screen.getByText('Email')).toBeDefined()
+  })
+
+  it('renders bio textarea', () => {
+    mockUseSocialLinks.mockReturnValue(buildDefaultHook())
+    render(<ProfileEditor onBack={vi.fn()} />)
+    expect(screen.getByPlaceholderText(/tell people/i)).toBeDefined()
   })
 
   it('calls fetchOwnLinks on mount', async () => {
@@ -73,7 +80,8 @@ describe('ProfileEditor', () => {
 
   it('shows "Saved!" after a successful save', async () => {
     const saveLinks = vi.fn().mockResolvedValue(true)
-    mockUseSocialLinks.mockReturnValue(buildDefaultHook({ saveLinks }))
+    const saveProfile = vi.fn().mockResolvedValue(true)
+    mockUseSocialLinks.mockReturnValue(buildDefaultHook({ saveLinks, saveProfile }))
     render(<ProfileEditor onBack={vi.fn()} />)
 
     fireEvent.click(screen.getByText('Save'))
@@ -108,8 +116,7 @@ describe('ProfileEditor', () => {
     const onBack = vi.fn()
     mockUseSocialLinks.mockReturnValue(buildDefaultHook())
     render(<ProfileEditor onBack={onBack} />)
-    // The back button is an SVG chevron — click by querying the button near "My Socials"
-    const header = screen.getByText('My Socials')
+    const header = screen.getByText('My Profile')
     const backBtn = header.parentElement?.querySelector('button') as HTMLButtonElement
     fireEvent.click(backBtn)
     expect(onBack).toHaveBeenCalledOnce()

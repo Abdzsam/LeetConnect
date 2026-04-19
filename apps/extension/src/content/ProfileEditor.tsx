@@ -59,16 +59,31 @@ const PLATFORM_ICONS: Record<string, React.ReactNode> = {
   ),
 }
 
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  background: LC.surfaceHi,
+  border: `1px solid ${LC.border}`,
+  borderRadius: 8,
+  padding: '7px 10px',
+  fontSize: 12,
+  color: LC.text,
+  outline: 'none',
+  fontFamily: LC.font,
+  boxSizing: 'border-box',
+}
+
 // ─── ProfileEditor ────────────────────────────────────────────────────────────
 
 export const ProfileEditor: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const { links, loading, saving, error, fetchOwnLinks, saveLinks } = useSocialLinks()
+  const { links, loading, saving, error, fetchOwnLinks, saveLinks, fetchOwnProfile, saveProfile } = useSocialLinks()
+  const [bio, setBio] = useState('')
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     void fetchOwnLinks()
-  }, [fetchOwnLinks])
+    fetchOwnProfile().then((p) => { if (p) setBio(p.bio ?? '') })
+  }, [fetchOwnLinks, fetchOwnProfile])
 
   useEffect(() => {
     const map: Record<string, string> = {}
@@ -81,19 +96,19 @@ export const ProfileEditor: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       .filter(([, v]) => v.trim())
       .map(([platform, value]) => ({ platform: platform as SocialLink['platform'], value: value.trim() }))
 
-    const ok = await saveLinks(newLinks)
-    if (ok) {
+    const [linksOk, bioOk] = await Promise.all([saveLinks(newLinks), saveProfile(bio)])
+    if (linksOk && bioOk) {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     }
-  }, [draft, saveLinks])
+  }, [draft, bio, saveLinks, saveProfile])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Sub-header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '10px 14px 10px',
+        padding: '10px 14px',
         borderBottom: `1px solid ${LC.border}`,
         flexShrink: 0,
       }}>
@@ -112,12 +127,46 @@ export const ProfileEditor: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           </svg>
         </button>
         <span style={{ fontSize: 13, fontWeight: 600, color: LC.text, fontFamily: LC.font }}>
-          My Socials
+          My Profile
         </span>
       </div>
 
       {/* Scrollable fields */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Bio */}
+        <div>
+          <label style={{
+            display: 'block', fontSize: 11, fontWeight: 600, color: LC.textSub,
+            textTransform: 'uppercase', letterSpacing: '0.04em',
+            fontFamily: LC.font, marginBottom: 5,
+          }}>Bio</label>
+          <textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="Tell people a bit about yourself…"
+            maxLength={300}
+            rows={3}
+            style={{
+              ...inputStyle,
+              resize: 'none',
+              lineHeight: 1.5,
+            }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = LC.orange }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = LC.border }}
+          />
+          <div style={{ fontSize: 10, color: LC.textMuted, fontFamily: LC.font, textAlign: 'right', marginTop: 2 }}>
+            {bio.length}/300
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{ borderTop: `1px solid ${LC.border}`, marginTop: 2 }} />
+
+        {/* Social links */}
+        <div style={{ fontSize: 11, fontWeight: 600, color: LC.textSub, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: LC.font }}>
+          Social Links
+        </div>
+
         {loading ? (
           <p style={{ fontSize: 12, color: LC.textSub, fontFamily: LC.font, margin: 0 }}>Loading…</p>
         ) : (
@@ -140,18 +189,7 @@ export const ProfileEditor: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   onChange={(e) => setDraft((d) => ({ ...d, [platform]: e.target.value }))}
                   placeholder={meta.placeholder}
                   maxLength={200}
-                  style={{
-                    width: '100%',
-                    background: LC.surfaceHi,
-                    border: `1px solid ${LC.border}`,
-                    borderRadius: 8,
-                    padding: '7px 10px',
-                    fontSize: 12,
-                    color: LC.text,
-                    outline: 'none',
-                    fontFamily: LC.font,
-                    boxSizing: 'border-box',
-                  }}
+                  style={inputStyle}
                   onFocus={(e) => { e.currentTarget.style.borderColor = LC.orange }}
                   onBlur={(e) => { e.currentTarget.style.borderColor = LC.border }}
                 />

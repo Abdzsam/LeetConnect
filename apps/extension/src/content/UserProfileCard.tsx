@@ -130,6 +130,16 @@ export const UserProfileCard: React.FC<{
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: LC.teal, flexShrink: 0, display: 'inline-block' }} />
               <span style={{ fontSize: 11, color: LC.textSub, fontFamily: LC.font }}>Solving now</span>
             </div>
+            {profile?.bio && (
+              <div style={{
+                fontSize: 11, color: LC.textSub, fontFamily: LC.font,
+                marginTop: 6, lineHeight: 1.5,
+                display: '-webkit-box', WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              }}>
+                {profile.bio}
+              </div>
+            )}
           </div>
           <button
             type="button"

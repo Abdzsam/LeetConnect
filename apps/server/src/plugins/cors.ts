@@ -20,9 +20,14 @@ async function corsPlugin(fastify: FastifyInstance): Promise<void> {
         cb(null, true)
         return
       }
+      // Allow LeetCode (content script fetches originate from the page)
+      if (origin === 'https://leetcode.com') {
+        cb(null, true)
+        return
+      }
       cb(new Error('Not allowed by CORS'), false)
     },
-    methods: ['GET', 'POST', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
     exposedHeaders: ['Authorization'],
     credentials: true,
   })
