@@ -9,16 +9,17 @@ const LC = {
   bg:        '#1a1a1a',
   surface:   '#282828',
   surfaceHi: '#333333',
-  border:    '#3e3e3e',
-  borderSub: '#2d2d2d',
+  border:    'rgba(255,255,255,0.08)',
+  borderSub: 'rgba(255,255,255,0.05)',
   orange:    '#ffa116',
   orangeDim: 'rgba(255,161,22,0.15)',
   teal:      '#00b8a3',
+  tealDim:   'rgba(0,184,163,0.15)',
   red:       '#ef4743',
   redDim:    'rgba(239,71,67,0.15)',
   text:      '#eff1f6',
-  textSub:   '#8d8d8d',
-  textMuted: '#565656',
+  textSub:   '#9ca3af',
+  textMuted: '#6b7280',
   font:      'system-ui, -apple-system, sans-serif',
 }
 
@@ -38,15 +39,15 @@ function initials(name: string | null | undefined): string {
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
-const Avatar: React.FC<{ name: string | null; url?: string | null; size?: number }> = ({ name, url, size = 28 }) => (
+const Avatar: React.FC<{ name: string | null; url?: string | null; size?: number }> = ({ name, url, size = 30 }) => (
   <div style={{
     width: size, height: size,
     borderRadius: '50%',
     background: url ? 'transparent' : LC.orangeDim,
-    border: `1px solid ${url ? 'transparent' : LC.orange}`,
+    border: `2px solid ${url ? 'transparent' : LC.orange}`,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: Math.floor(size * 0.38),
-    fontWeight: 600,
+    fontSize: Math.floor(size * 0.36),
+    fontWeight: 700,
     color: LC.orange,
     flexShrink: 0,
     fontFamily: LC.font,
@@ -69,33 +70,32 @@ const Section: React.FC<{
   <div style={{
     background: LC.surface,
     border: `1px solid ${LC.border}`,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: 10,
   }}>
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
-      padding: '8px 12px',
+      padding: '10px 14px',
       borderBottom: `1px solid ${LC.borderSub}`,
     }}>
       <span style={{
-        fontSize: 13, fontWeight: 500,
-        color: LC.text,
-        fontFamily: LC.font,
-        flex: 1,
+        fontSize: 12, fontWeight: 600, letterSpacing: '0.04em',
+        color: LC.textSub, textTransform: 'uppercase',
+        fontFamily: LC.font, flex: 1,
       }}>{title}</span>
       {badge !== undefined && (
         <span style={{
           background: LC.orangeDim,
           color: LC.orange,
-          fontSize: 11, fontWeight: 600,
-          padding: '1px 6px',
-          borderRadius: 4,
+          fontSize: 11, fontWeight: 700,
+          padding: '2px 7px',
+          borderRadius: 20,
           fontFamily: LC.font,
         }}>{badge}</span>
       )}
     </div>
-    <div style={{ padding: '10px 12px' }}>{children}</div>
+    <div style={{ padding: '12px 14px' }}>{children}</div>
   </div>
 )
 
@@ -138,8 +138,8 @@ const OnlineSection: React.FC<{
             style={{
               background: 'transparent',
               border: `1px solid ${LC.border}`,
-              borderRadius: 4,
-              padding: '3px 8px',
+              borderRadius: 8,
+              padding: '4px 10px',
               fontSize: 11,
               color: LC.textSub,
               cursor: 'pointer',
@@ -169,8 +169,8 @@ const OnlineSection: React.FC<{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       background: isCurrent ? LC.orangeDim : 'transparent',
                       border: `1px solid ${isCurrent ? LC.orange : LC.border}`,
-                      borderRadius: 4,
-                      padding: '5px 8px',
+                      borderRadius: 8,
+                      padding: '6px 10px',
                       cursor: isCurrent || isFull ? 'default' : 'pointer',
                       opacity: isFull && !isCurrent ? 0.45 : 1,
                     }}
@@ -295,9 +295,9 @@ const ChatSection: React.FC<{
             flex: 1,
             background: LC.surfaceHi,
             border: `1px solid ${LC.border}`,
-            borderRadius: 4,
-            padding: '6px 10px',
-            fontSize: 12,
+            borderRadius: 10,
+            padding: '8px 12px',
+            fontSize: 13,
             color: LC.text,
             outline: 'none',
             fontFamily: LC.font,
@@ -312,8 +312,8 @@ const ChatSection: React.FC<{
           style={{
             background: draft.trim() ? LC.orange : LC.surfaceHi,
             border: 'none',
-            borderRadius: 4,
-            padding: '6px 10px',
+            borderRadius: 10,
+            padding: '8px 12px',
             cursor: draft.trim() ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             opacity: draft.trim() ? 1 : 0.4,
@@ -365,8 +365,8 @@ const VoiceSection: React.FC<{
         <div style={{
           background: LC.redDim,
           border: `1px solid ${LC.red}`,
-          borderRadius: 4, padding: '6px 8px',
-          fontSize: 11, color: '#ff6b6b',
+          borderRadius: 8, padding: '8px 10px',
+          fontSize: 12, color: '#ff6b6b',
           fontFamily: LC.font, lineHeight: 1.5,
         }}>
           {error}
@@ -380,11 +380,11 @@ const VoiceSection: React.FC<{
           disabled={connecting}
           style={{
             flex: 1,
-            padding: '6px 0',
-            borderRadius: 4,
+            padding: '8px 0',
+            borderRadius: 10,
             border: joined ? `1px solid ${LC.red}` : 'none',
             cursor: connecting ? 'wait' : 'pointer',
-            fontSize: 12, fontWeight: 500,
+            fontSize: 13, fontWeight: 600,
             fontFamily: LC.font,
             background: joined ? LC.redDim : LC.orange,
             color: joined ? '#ff6b6b' : '#1a1a1a',
@@ -398,11 +398,11 @@ const VoiceSection: React.FC<{
             type="button"
             onClick={onToggleMute}
             style={{
-              padding: '6px 10px',
-              borderRadius: 4,
+              padding: '8px 12px',
+              borderRadius: 10,
               border: `1px solid ${LC.border}`,
               cursor: 'pointer',
-              fontSize: 12, fontWeight: 500,
+              fontSize: 13, fontWeight: 500,
               fontFamily: LC.font,
               background: muted ? LC.orangeDim : LC.surfaceHi,
               color: muted ? LC.orange : LC.textSub,
@@ -449,10 +449,10 @@ const ProblemRoomContent: React.FC = () => {
         <div style={{
           background: LC.redDim,
           border: `1px solid ${LC.red}`,
-          borderRadius: 4,
-          padding: '5px 10px',
-          marginBottom: 8,
-          fontSize: 11, color: '#ff6b6b',
+          borderRadius: 8,
+          padding: '7px 12px',
+          marginBottom: 10,
+          fontSize: 12, color: '#ff6b6b',
           fontFamily: LC.font,
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
@@ -500,8 +500,8 @@ export const SlidingPanel: React.FC = () => {
     return () => document.removeEventListener('keyup', onKey)
   }, [isOpen])
 
-  const PANEL_WIDTH = 300
-  const TAB_WIDTH = 36
+  const PANEL_WIDTH = 320
+  const TAB_WIDTH = 38
 
   return (
     <div style={{
@@ -521,15 +521,15 @@ export const SlidingPanel: React.FC = () => {
           position: 'absolute',
           left: -TAB_WIDTH, top: '50%',
           transform: 'translateY(-50%)',
-          width: TAB_WIDTH, height: 72,
-          borderRadius: '6px 0 0 6px',
+          width: TAB_WIDTH, height: 80,
+          borderRadius: '10px 0 0 10px',
           background: LC.orange,
           border: 'none',
           cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           pointerEvents: 'auto', padding: 0,
           outline: 'none',
-          boxShadow: '-2px 0 12px rgba(0,0,0,0.4)',
+          boxShadow: '-3px 0 16px rgba(0,0,0,0.5)',
         }}
         onFocus={(e) => { e.currentTarget.style.outline = `2px solid ${LC.orange}`; e.currentTarget.style.outlineOffset = '2px' }}
         onBlur={(e) => { e.currentTarget.style.outline = 'none' }}
@@ -545,7 +545,8 @@ export const SlidingPanel: React.FC = () => {
         position: 'absolute', top: 0, left: 0,
         width: '100%', height: '100%',
         background: LC.bg,
-        borderLeft: `1px solid ${LC.border}`,
+        borderLeft: `1px solid rgba(255,255,255,0.06)`,
+        boxShadow: '-4px 0 24px rgba(0,0,0,0.6)',
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden', pointerEvents: 'auto',
       }}>
@@ -553,20 +554,20 @@ export const SlidingPanel: React.FC = () => {
         <div style={{
           background: LC.surface,
           borderBottom: `1px solid ${LC.border}`,
-          padding: '10px 14px',
+          padding: '12px 16px',
           display: 'flex', alignItems: 'center', gap: 10,
           flexShrink: 0,
         }}>
           <div style={{
-            width: 28, height: 28,
-            borderRadius: 4,
-            background: LC.orangeDim,
-            border: `1px solid ${LC.orange}`,
+            width: 32, height: 32,
+            borderRadius: 9,
+            background: `linear-gradient(135deg, ${LC.orange} 0%, #ff8c00 100%)`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 700,
-            color: LC.orange,
+            fontSize: 12, fontWeight: 800,
+            color: '#1a1a1a',
             fontFamily: LC.font,
             flexShrink: 0,
+            letterSpacing: '-0.03em',
           }}>LC</div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -590,18 +591,19 @@ export const SlidingPanel: React.FC = () => {
               aria-label="Sign out"
               title="Sign out"
               style={{
-                width: 26, height: 26,
-                borderRadius: 4,
+                width: 28, height: 28,
+                borderRadius: 8,
                 background: 'transparent',
                 border: `1px solid ${LC.border}`,
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,
+                transition: 'background 150ms, border-color 150ms',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = LC.red; e.currentTarget.style.background = LC.redDim }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = LC.border; e.currentTarget.style.background = 'transparent' }}
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={LC.textSub} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={LC.textSub} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />
@@ -614,18 +616,19 @@ export const SlidingPanel: React.FC = () => {
             onClick={toggle}
             aria-label="Close panel"
             style={{
-              width: 26, height: 26,
-              borderRadius: 4,
+              width: 28, height: 28,
+              borderRadius: 8,
               background: 'transparent',
               border: `1px solid ${LC.border}`,
               cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
+              transition: 'background 150ms',
             }}
             onMouseEnter={(e) => { e.currentTarget.style.background = LC.surfaceHi }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={LC.textSub} strokeWidth="2.5" strokeLinecap="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={LC.textSub} strokeWidth="2.5" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
