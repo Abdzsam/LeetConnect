@@ -70,6 +70,7 @@ export function useProblemRoom() {
   const [problemSlug, setProblemSlug] = useState<string | null>(() =>
     getProblemSlug(window.location.pathname),
   )
+  const [messagesLoading, setMessagesLoading] = useState(true)
   const [voiceParticipants, setVoiceParticipants] = useState<VoiceUser[]>([])
   const [voiceJoined, setVoiceJoined] = useState(false)
   const [voiceConnecting, setVoiceConnecting] = useState(false)
@@ -260,12 +261,14 @@ export function useProblemRoom() {
         }
         setCurrentRoomNumber(null)
         setAvailableRooms([])
+        setRoomUsers([])
+        setVoiceParticipants([])
         if (newSlug && socketRef.current?.connected) {
+          setMessagesLoading(true)
           socketRef.current.emit('join_room', { problemSlug: newSlug })
         } else {
-          setRoomUsers([])
           setMessages([])
-          setVoiceParticipants([])
+          setMessagesLoading(false)
         }
       }
     }
@@ -297,7 +300,10 @@ export function useProblemRoom() {
         setConnected(true)
         const slug = slugRef.current
         if (slug) {
+          setMessagesLoading(true)
           socket.emit('join_room', { problemSlug: slug })
+        } else {
+          setMessagesLoading(false)
         }
       })
 
@@ -310,6 +316,7 @@ export function useProblemRoom() {
       socket.on('room_state', (data: RoomStatePayload) => {
         setRoomUsers(data.users)
         setMessages(data.messages)
+        setMessagesLoading(false)
         setCurrentRoomNumber(data.roomNumber)
         setAvailableRooms(data.rooms)
         setVoiceParticipants(data.voiceUsers ?? [])
@@ -425,6 +432,7 @@ export function useProblemRoom() {
       setConnected(false)
       setRoomUsers([])
       setMessages([])
+      setMessagesLoading(true)
       setCurrentRoomNumber(null)
       setAvailableRooms([])
       setVoiceParticipants([])
@@ -453,6 +461,7 @@ export function useProblemRoom() {
   return {
     roomUsers,
     messages,
+    messagesLoading,
     connected,
     problemSlug,
     currentRoomNumber,

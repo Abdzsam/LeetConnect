@@ -234,9 +234,10 @@ const OnlineSection: React.FC<{
 
 const ChatSection: React.FC<{
   messages: RoomMessage[]
+  messagesLoading: boolean
   onSend: (content: string) => void
   currentUserId: string
-}> = ({ messages, onSend, currentUserId }) => {
+}> = ({ messages, messagesLoading, onSend, currentUserId }) => {
   const [draft, setDraft] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -271,7 +272,11 @@ const ChatSection: React.FC<{
         className="lc-scrollbar"
         style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}
       >
-        {messages.length === 0 ? (
+        {messagesLoading ? (
+          <p style={{ fontSize: 12, color: '#6b7280', fontFamily: 'system-ui, sans-serif', margin: 0 }}>
+            Loading messages…
+          </p>
+        ) : messages.length === 0 ? (
           <p style={{ fontSize: 12, color: '#6b7280', fontFamily: 'system-ui, sans-serif', margin: 0 }}>
             No messages yet. Say hi!
           </p>
@@ -469,6 +474,7 @@ const ProblemRoomContent: React.FC = () => {
   const {
     roomUsers,
     messages,
+    messagesLoading,
     connected,
     problemSlug,
     currentRoomNumber,
@@ -518,7 +524,7 @@ const ProblemRoomContent: React.FC = () => {
         availableRooms={availableRooms}
         onJoinRoom={joinRoom}
       />
-      <ChatSection messages={messages} onSend={sendMessage} currentUserId={state.user.id} />
+      <ChatSection messages={messages} messagesLoading={messagesLoading} onSend={sendMessage} currentUserId={state.user.id} />
       <VoiceSection
         joined={voiceJoined}
         connecting={voiceConnecting}

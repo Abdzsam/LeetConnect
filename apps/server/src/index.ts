@@ -8,6 +8,7 @@ import corsPlugin from './plugins/cors.js'
 import authPlugin from './plugins/auth.js'
 import authRoutes from './routes/auth.js'
 import { createSocketServer } from './socket/index.js'
+import { scheduleMessageCleanup } from './jobs/cleanupMessages.js'
 
 const app = Fastify({
   logger: { level: config.nodeEnv === 'production' ? 'warn' : 'info' },
@@ -23,3 +24,4 @@ app.get('/health', async () => ({ status: 'ok', ts: Date.now() }))
 
 await app.listen({ port: config.port, host: '0.0.0.0' })
 createSocketServer(app.server)
+scheduleMessageCleanup()
