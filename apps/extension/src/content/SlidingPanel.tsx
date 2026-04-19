@@ -2,6 +2,8 @@ import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { AuthGate } from './AuthGate'
 import { useAuth } from '../hooks/useAuth'
 import { useProblemRoom, type RoomUser, type RoomMessage, type SubRoomInfo, type VoiceUser } from '../hooks/useProblemRoom'
+import { ProfileEditor } from './ProfileEditor'
+import { UserProfileCard } from './UserProfileCard'
 
 // ─── LeetCode design tokens ───────────────────────────────────────────────────
 
@@ -125,7 +127,8 @@ const OnlineSection: React.FC<{
   currentRoomNumber: number | null
   availableRooms: SubRoomInfo[]
   onJoinRoom: (n: number) => void
-}> = ({ users, currentUserId, currentRoomNumber, availableRooms, onJoinRoom }) => {
+  onUserClick: (user: RoomUser) => void
+}> = ({ users, currentUserId, currentRoomNumber, availableRooms, onJoinRoom, onUserClick }) => {
   const [showRooms, setShowRooms] = useState(false)
 
   return (
@@ -194,27 +197,51 @@ const OnlineSection: React.FC<{
           No one else here yet.
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {users.map((user) => (
-            <div key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Avatar name={user.name} url={user.avatarUrl} />
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  display: 'inline-block', width: 6, height: 6,
-                  borderRadius: '50%', background: LC.teal, flexShrink: 0,
-                  animation: 'lc-pulse 2s ease-in-out infinite',
-                }} />
-                <span style={{
-                  fontSize: 13, fontWeight: 400,
-                  color: user.id === currentUserId ? LC.orange : LC.text,
-                  fontFamily: LC.font,
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                  {user.name}{user.id === currentUserId ? ' (you)' : ''}
-                </span>
-              </div>
-            </div>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {users.map((user) => {
+            const isMe = user.id === currentUserId
+            return (
+              <button
+                key={user.id}
+                type="button"
+                onClick={() => { if (!isMe) onUserClick(user) }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: 'transparent',
+                  border: '1px solid transparent',
+                  borderRadius: 8,
+                  padding: '5px 6px',
+                  cursor: isMe ? 'default' : 'pointer',
+                  textAlign: 'left', width: '100%',
+                  transition: 'background 150ms, border-color 150ms',
+                }}
+                onMouseEnter={(e) => { if (!isMe) { e.currentTarget.style.background = LC.surfaceHi; e.currentTarget.style.borderColor = LC.border } }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
+              >
+                <Avatar name={user.name} url={user.avatarUrl} />
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{
+                    display: 'inline-block', width: 6, height: 6,
+                    borderRadius: '50%', background: LC.teal, flexShrink: 0,
+                    animation: 'lc-pulse 2s ease-in-out infinite',
+                  }} />
+                  <span style={{
+                    fontSize: 13, fontWeight: 400,
+                    color: isMe ? LC.orange : LC.text,
+                    fontFamily: LC.font,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {user.name}{isMe ? ' (you)' : ''}
+                  </span>
+                </div>
+                {!isMe && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={LC.textMuted} strokeWidth="2" strokeLinecap="round">
+                    <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+                  </svg>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
     </Section>
@@ -511,11 +538,13 @@ const ProblemRoomContent: React.FC = () => {
     speakingSocketIds, localSocketId,
   } = useProblemRoom()
 
+  const [selectedUser, setSelectedUser] = useState<RoomUser | null>(null)
+
   if (state.status !== 'authenticated') return null
   if (!problemSlug) return <NoProblemPlaceholder />
 
   return (
-    <>
+    <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
       {!connected && (
         <div style={{
           background: LC.redDim,
@@ -537,6 +566,7 @@ const ProblemRoomContent: React.FC = () => {
         currentRoomNumber={currentRoomNumber}
         availableRooms={availableRooms}
         onJoinRoom={joinRoom}
+        onUserClick={setSelectedUser}
       />
       <ChatSection
         messages={messages}
@@ -556,7 +586,14 @@ const ProblemRoomContent: React.FC = () => {
         onLeave={leaveVoice}
         onToggleMute={toggleMute}
       />
-    </>
+
+      {selectedUser && (
+        <UserProfileCard
+          user={selectedUser}
+          onClose={() => setSelectedUser(null)}
+        />
+      )}
+    </div>
   )
 }
 
@@ -564,6 +601,7 @@ const ProblemRoomContent: React.FC = () => {
 
 export const SlidingPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
   const { state, signOut } = useAuth()
   const toggle = useCallback(() => setIsOpen((v) => !v), [])
 
@@ -660,6 +698,31 @@ export const SlidingPanel: React.FC = () => {
           {state.status === 'authenticated' && (
             <button
               type="button"
+              onClick={() => setShowProfile((v) => !v)}
+              aria-label="Edit profile"
+              title="Edit socials"
+              style={{
+                width: 28, height: 28,
+                borderRadius: 8,
+                background: showProfile ? LC.orangeDim : 'transparent',
+                border: `1px solid ${showProfile ? LC.orange : LC.border}`,
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                transition: 'background 150ms, border-color 150ms',
+              }}
+              onMouseEnter={(e) => { if (!showProfile) { e.currentTarget.style.background = LC.surfaceHi } }}
+              onMouseLeave={(e) => { if (!showProfile) { e.currentTarget.style.background = 'transparent' } }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={showProfile ? LC.orange : LC.textSub} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+              </svg>
+            </button>
+          )}
+
+          {state.status === 'authenticated' && (
+            <button
+              type="button"
               onClick={signOut}
               aria-label="Sign out"
               title="Sign out"
@@ -708,11 +771,17 @@ export const SlidingPanel: React.FC = () => {
         </div>
 
         {/* Content */}
-        <div className="lc-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '10px 10px 6px', display: 'flex', flexDirection: 'column' }}>
-          <AuthGate>
-            <ProblemRoomContent />
-          </AuthGate>
-        </div>
+        {showProfile && state.status === 'authenticated' ? (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <ProfileEditor onBack={() => setShowProfile(false)} />
+          </div>
+        ) : (
+          <div className="lc-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '10px 10px 6px', display: 'flex', flexDirection: 'column' }}>
+            <AuthGate>
+              <ProblemRoomContent />
+            </AuthGate>
+          </div>
+        )}
 
         {/* Footer */}
         <div style={{ padding: '6px 14px', borderTop: `1px solid ${LC.borderSub}`, display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>

@@ -8,6 +8,12 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
+export const SOCIAL_PLATFORMS = [
+  'github', 'linkedin', 'instagram', 'discord',
+  'hackerrank', 'codeforces', 'email',
+] as const
+export type SocialPlatform = typeof SOCIAL_PLATFORMS[number]
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export const users = pgTable('users', {
@@ -58,10 +64,30 @@ export const problemMessages = pgTable(
   }),
 )
 
+// ─── User Social Links ────────────────────────────────────────────────────────
+
+export const userSocialLinks = pgTable(
+  'user_social_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    platform: text('platform').$type<SocialPlatform>().notNull(),
+    value: text('value').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    userPlatformUnique: unique('user_platform_unique').on(table.userId, table.platform),
+    userIdIdx: index('user_social_links_user_id_idx').on(table.userId),
+  }),
+)
+
 // ─── Relations ────────────────────────────────────────────────────────────────
 
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
+  socialLinks: many(userSocialLinks),
 }))
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -69,6 +95,10 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
     fields: [refreshTokens.userId],
     references: [users.id],
   }),
+}))
+
+export const userSocialLinksRelations = relations(userSocialLinks, ({ one }) => ({
+  user: one(users, { fields: [userSocialLinks.userId], references: [users.id] }),
 }))
 
 // ─── Inferred types ───────────────────────────────────────────────────────────
@@ -79,3 +109,5 @@ export type RefreshToken = typeof refreshTokens.$inferSelect
 export type NewRefreshToken = typeof refreshTokens.$inferInsert
 export type ProblemMessage = typeof problemMessages.$inferSelect
 export type NewProblemMessage = typeof problemMessages.$inferInsert
+export type UserSocialLink = typeof userSocialLinks.$inferSelect
+export type NewUserSocialLink = typeof userSocialLinks.$inferInsert
