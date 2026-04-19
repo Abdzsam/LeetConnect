@@ -255,7 +255,8 @@ const ChatSection: React.FC<{
   messagesLoading: boolean
   onSend: (content: string) => void
   currentUserId: string
-}> = ({ messages, messagesLoading, onSend, currentUserId }) => {
+  onUserClick: (user: RoomUser) => void
+}> = ({ messages, messagesLoading, onSend, currentUserId, onUserClick }) => {
   const [draft, setDraft] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -287,18 +288,26 @@ const ChatSection: React.FC<{
         ) : (
           messages.map((msg) => {
             const isMe = msg.author.id === currentUserId
+            const handleAuthorClick = () => { if (!isMe) onUserClick(msg.author as RoomUser) }
             return (
               <div key={msg.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <Avatar name={msg.author.name} url={msg.author.avatarUrl} size={24} />
+                <button type="button" onClick={handleAuthorClick} disabled={isMe}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: isMe ? 'default' : 'pointer', flexShrink: 0 }}>
+                  <Avatar name={msg.author.name} url={msg.author.avatarUrl} size={24} />
+                </button>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: isMe ? LC.orange : LC.text, fontFamily: LC.font }}>
-                      {isMe ? 'You' : (msg.author.name ?? 'Unknown')}
-                    </span>
+                    <button type="button" onClick={handleAuthorClick} disabled={isMe}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: isMe ? 'default' : 'pointer' }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: isMe ? LC.orange : LC.text, fontFamily: LC.font }}>
+                        {isMe ? 'You' : (msg.author.name ?? 'Unknown')}
+                      </span>
+                    </button>
                     <span style={{ fontSize: 10, color: LC.textMuted, fontFamily: LC.font }}>
                       {formatTime(msg.createdAt)}
                     </span>
                   </div>
+
                   <p style={{ fontSize: 12, color: LC.textSub, margin: 0, lineHeight: 1.5, wordBreak: 'break-word', fontFamily: LC.font }}>
                     {msg.content}
                   </p>
@@ -364,8 +373,10 @@ const VoiceAvatar: React.FC<{
   speaking: boolean
   isLocal: boolean
   muted?: boolean
-}> = ({ user, speaking, isLocal, muted }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, width: 58 }}>
+  onClick?: () => void
+}> = ({ user, speaking, isLocal, muted, onClick }) => (
+  <button type="button" onClick={onClick} disabled={isLocal}
+    style={{ background: 'none', border: 'none', padding: 0, cursor: isLocal ? 'default' : 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, width: 58 }}>
     <div style={{
       position: 'relative',
       width: 48, height: 48,
@@ -417,7 +428,7 @@ const VoiceAvatar: React.FC<{
     }}>
       {isLocal ? 'You' : (user.name?.split(' ')[0] ?? '?')}
     </span>
-  </div>
+  </button>
 )
 
 // ─── Voice section ────────────────────────────────────────────────────────────
@@ -433,7 +444,8 @@ const VoiceSection: React.FC<{
   onJoin: () => void
   onLeave: () => void
   onToggleMute: () => void
-}> = ({ joined, connecting, muted, participants, speakingSocketIds, localSocketId, error, onJoin, onLeave, onToggleMute }) => (
+  onUserClick: (user: RoomUser) => void
+}> = ({ joined, connecting, muted, participants, speakingSocketIds, localSocketId, error, onJoin, onLeave, onToggleMute, onUserClick }) => (
   <Section title="Voice" badge={participants.length > 0 ? participants.length : undefined}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
@@ -447,6 +459,7 @@ const VoiceSection: React.FC<{
               speaking={speakingSocketIds.has(socketId)}
               isLocal={socketId === localSocketId}
               muted={socketId === localSocketId ? muted : undefined}
+              onClick={() => { if (socketId !== localSocketId) onUserClick(user) }}
             />
           ))}
         </div>
@@ -573,6 +586,7 @@ const ProblemRoomContent: React.FC = () => {
         messagesLoading={messagesLoading}
         onSend={sendMessage}
         currentUserId={state.user.id}
+        onUserClick={setSelectedUser}
       />
       <VoiceSection
         joined={voiceJoined}
@@ -585,6 +599,7 @@ const ProblemRoomContent: React.FC = () => {
         onJoin={joinVoice}
         onLeave={leaveVoice}
         onToggleMute={toggleMute}
+        onUserClick={setSelectedUser}
       />
 
       {selectedUser && (
