@@ -7,6 +7,7 @@ import { config } from './config.js'
 import corsPlugin from './plugins/cors.js'
 import authPlugin from './plugins/auth.js'
 import authRoutes from './routes/auth.js'
+import profileRoutes from './routes/profile.js'
 import { createSocketServer } from './socket/index.js'
 import { scheduleMessageCleanup } from './jobs/cleanupMessages.js'
 
@@ -19,6 +20,7 @@ await app.register(corsPlugin)
 await app.register(cookie)
 await app.register(authPlugin)
 await app.register(authRoutes, { prefix: '/' })
+await app.register(profileRoutes, { prefix: '/' })
 
 app.get('/health', async () => ({ status: 'ok', ts: Date.now() }))
 
