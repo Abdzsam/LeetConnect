@@ -32,7 +32,7 @@ export default defineManifest({
 
   content_scripts: [
     {
-      matches: ['<all_urls>'],
+      matches: ['*://*.leetcode.com/*'],
       js: ['src/content/index.tsx'],
       run_at: 'document_idle',
     },
