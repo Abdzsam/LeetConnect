@@ -122,7 +122,7 @@ export function useProblemRoom() {
       for (const [id, analyser] of analysersRef.current) {
         const buf = analyserBuffersRef.current.get(id)
         if (!buf) continue
-        analyser.getFloatTimeDomainData(buf)
+        analyser.getFloatTimeDomainData(buf as Float32Array<ArrayBuffer>)
         let sum = 0
         for (const s of buf) sum += s * s
         if (Math.sqrt(sum / buf.length) > 0.01) speaking.add(id)
@@ -287,7 +287,7 @@ export function useProblemRoom() {
 
     try {
       const stream = await ensureLocalStream()
-      const sid = socket.id
+      const sid = socket.id ?? ''
       setLocalSocketId(sid)
       monitorStream(sid, stream)
       startSpeakLoop()

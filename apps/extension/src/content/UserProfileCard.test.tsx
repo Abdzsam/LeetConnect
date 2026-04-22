@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
-import React from 'react'
 import type { RoomUser } from '../hooks/useProblemRoom.js'
 
 // ─── Mock useSocialLinks ──────────────────────────────────────────────────────
@@ -43,97 +42,87 @@ afterEach(() => {
 
 describe('UserProfileCard', () => {
   it('shows loading text while the profile is being fetched', () => {
-    // Never resolve — keep loading state
     mockFetchUserProfile.mockReturnValue(new Promise(() => {}))
-    render(<UserProfileCard user={mockUser} onClose={vi.fn()} />)
+    render(<UserProfileCard user={mockUser} isOnline={true} onClose={vi.fn()} />)
     expect(screen.getByText('Loading…')).toBeDefined()
   })
 
   it('renders the user name after the profile loads', async () => {
-    mockFetchUserProfile.mockResolvedValue({
-      name: 'Alice Smith',
-      avatarUrl: null,
-      links: [],
-    })
-    render(<UserProfileCard user={mockUser} onClose={vi.fn()} />)
+    mockFetchUserProfile.mockResolvedValue({ name: 'Alice Smith', bio: null, avatarUrl: null, links: [] })
+    render(<UserProfileCard user={mockUser} isOnline={true} onClose={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Alice Smith')).toBeDefined())
   })
 
   it('shows "No socials linked yet." when the profile has no links', async () => {
-    mockFetchUserProfile.mockResolvedValue({
-      name: 'Alice Smith',
-      avatarUrl: null,
-      links: [],
-    })
-    render(<UserProfileCard user={mockUser} onClose={vi.fn()} />)
+    mockFetchUserProfile.mockResolvedValue({ name: 'Alice Smith', bio: null, avatarUrl: null, links: [] })
+    render(<UserProfileCard user={mockUser} isOnline={true} onClose={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('No socials linked yet.')).toBeDefined())
   })
 
   it('renders a social link with correct platform label', async () => {
     mockFetchUserProfile.mockResolvedValue({
-      name: 'Alice Smith',
-      avatarUrl: null,
+      name: 'Alice Smith', bio: null, avatarUrl: null,
       links: [{ platform: 'github', value: 'alice-dev' }],
     })
-    render(<UserProfileCard user={mockUser} onClose={vi.fn()} />)
+    render(<UserProfileCard user={mockUser} isOnline={true} onClose={vi.fn()} />)
     await waitFor(() => {
-      // Platform label shown in upper-case
       expect(screen.getByText(/github/i)).toBeDefined()
       expect(screen.getByText('alice-dev')).toBeDefined()
     })
   })
 
-  it('renders a Discord entry without an anchor (buildSocialUrl returns null for discord)', async () => {
+  it('renders a Discord entry without an anchor', async () => {
     mockFetchUserProfile.mockResolvedValue({
-      name: 'Alice Smith',
-      avatarUrl: null,
+      name: 'Alice Smith', bio: null, avatarUrl: null,
       links: [{ platform: 'discord', value: 'alice#0001' }],
     })
-    render(<UserProfileCard user={mockUser} onClose={vi.fn()} />)
+    render(<UserProfileCard user={mockUser} isOnline={true} onClose={vi.fn()} />)
     await waitFor(() => {
       expect(screen.getByText('alice#0001')).toBeDefined()
-      // No <a> tag should wrap the discord entry
-      const discordValue = screen.getByText('alice#0001')
-      expect(discordValue.closest('a')).toBeNull()
+      expect(screen.getByText('alice#0001').closest('a')).toBeNull()
     })
   })
 
   it('wraps non-Discord social links in an anchor tag', async () => {
     mockFetchUserProfile.mockResolvedValue({
-      name: 'Alice Smith',
-      avatarUrl: null,
+      name: 'Alice Smith', bio: null, avatarUrl: null,
       links: [{ platform: 'github', value: 'alice-dev' }],
     })
-    render(<UserProfileCard user={mockUser} onClose={vi.fn()} />)
+    render(<UserProfileCard user={mockUser} isOnline={true} onClose={vi.fn()} />)
     await waitFor(() => {
-      const valueEl = screen.getByText('alice-dev')
-      const anchor = valueEl.closest('a')
+      const anchor = screen.getByText('alice-dev').closest('a')
       expect(anchor).toBeDefined()
       expect((anchor as HTMLAnchorElement).href).toContain('github.com/alice-dev')
     })
   })
 
+  it('shows "Solving now" when isOnline is true', async () => {
+    mockFetchUserProfile.mockResolvedValue({ name: 'Alice', bio: null, avatarUrl: null, links: [] })
+    render(<UserProfileCard user={mockUser} isOnline={true} onClose={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Solving now')).toBeDefined())
+  })
+
+  it('hides "Solving now" when isOnline is false', async () => {
+    mockFetchUserProfile.mockResolvedValue({ name: 'Alice', bio: null, avatarUrl: null, links: [] })
+    render(<UserProfileCard user={mockUser} isOnline={false} onClose={vi.fn()} />)
+    await waitFor(() => expect(screen.queryByText('Solving now')).toBeNull())
+  })
+
   it('calls onClose when the backdrop is clicked', async () => {
     const onClose = vi.fn()
-    mockFetchUserProfile.mockResolvedValue({ name: 'Alice', avatarUrl: null, links: [] })
-    const { container } = render(<UserProfileCard user={mockUser} onClose={onClose} />)
+    mockFetchUserProfile.mockResolvedValue({ name: 'Alice', bio: null, avatarUrl: null, links: [] })
+    const { container } = render(<UserProfileCard user={mockUser} isOnline={true} onClose={onClose} />)
     await waitFor(() => screen.getByText('Alice Smith'))
-
-    // The outermost div is the backdrop
-    const backdrop = container.firstElementChild as HTMLElement
-    fireEvent.click(backdrop)
+    fireEvent.click(container.firstElementChild as HTMLElement)
     expect(onClose).toHaveBeenCalledOnce()
   })
 
   it('calls onClose when the close button is clicked', async () => {
     const onClose = vi.fn()
-    mockFetchUserProfile.mockResolvedValue({ name: 'Alice', avatarUrl: null, links: [] })
-    render(<UserProfileCard user={mockUser} onClose={onClose} />)
+    mockFetchUserProfile.mockResolvedValue({ name: 'Alice', bio: null, avatarUrl: null, links: [] })
+    render(<UserProfileCard user={mockUser} isOnline={true} onClose={onClose} />)
     await waitFor(() => screen.getByText('Alice Smith'))
-
-    // The close button is in the card header
-    const closeBtn = document.querySelector('button') as HTMLButtonElement
-    fireEvent.click(closeBtn)
+    fireEvent.click(document.querySelector('button') as HTMLButtonElement)
     expect(onClose).toHaveBeenCalledOnce()
   })
 })

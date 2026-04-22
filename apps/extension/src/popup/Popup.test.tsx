@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
-import React from 'react'
 
 // ─── Mock chrome.runtime.sendMessage ─────────────────────────────────────────
 // The Popup uses `chrome.runtime.sendMessage` directly (not via useAuth).
