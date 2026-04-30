@@ -42,7 +42,7 @@ export default defineManifest({
     extension_pages: "script-src 'self'; object-src 'self'",
   },
 
-  permissions: ['storage', 'identity', 'webNavigation'],
+  permissions: ['storage', 'identity', 'webNavigation', 'alarms'],
 
   host_permissions: [`${serverOrigin}/*`],
 
